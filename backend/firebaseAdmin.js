@@ -1,8 +1,16 @@
 // firebaseAdmin.js
+import 'dotenv/config';
 import admin from 'firebase-admin';
-import serviceAccount from './firebase-service-account.json' assert { type: 'json' };
 
-// אתחל את האדמין עם מפתח השירות שלך
+// טען את המפתח מקודד ב־Base64 מתוך משתנה סביבה
+if (!process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
+  throw new Error('Missing FIREBASE_SERVICE_ACCOUNT_BASE64 environment variable');
+}
+
+const serviceAccount = JSON.parse(
+  Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString()
+);
+
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
