@@ -37,11 +37,8 @@ const normalizeDate = (x) => {
 };
 
 /**
- * ---- עזר: הדפסת טקסט עברי תקין ל-PDFKit ----
- * PDFKit לא תומך RTL, אז:
- * 1) מנקים רווחים מיותרים.
- * 2) הופכים את סדר המילים כדי שיראו RTL.
- * 3) מוסיפים סימון RTL בתחילת השורה.
+ * ---- עזרי RTL ל-PDFKit ----
+ * pdfkit לא תומך RTL; לכן הופכים סדר מילים ומיישרים לימין.
  */
 const rtlText = (doc, text, options = {}) => {
   const rtlMark = "\u200F";
@@ -50,11 +47,17 @@ const rtlText = (doc, text, options = {}) => {
   doc.text(fixed, { align: "right", ...options });
 };
 
+// הדפסת RTL בנקודה עם רוחב מוגדר, כאשר xRight הוא הקצה הימני של הבלוק.
+const rtlTextAt = (doc, text, xRight, y, width) => {
+  doc.text("", xRight - width, y); // הזזת הסמן
+  rtlText(doc, text, { width, align: "right" });
+};
+
 // GET /api/deliveries?product=productId
 router.get("/", async (req, res) => {
   try {
     const productId = req.query.product || null;
-    const deliveries = await getAllDeliveries(productId);
+    const deliveries = await getAllDeliveries(productId); // אם השירות מתעלם מהפרמטר, הסינון יתבצע בפרונט
     res.json(deliveries);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -79,38 +82,20 @@ router.post("/", async (req, res) => {
   try {
     const { customer, customerName, deliveredTo, items, signature, date } = req.body;
 
-    // שים לב: בגלל חתימה ב-base64 צריך להגדיל את limit ב-server.js:
-    // app.use(express.json({ limit: '5mb' }));
-
-    if (
-      !customer ||
-      !customerName ||
-      !deliveredTo ||
-      !Array.isArray(items) ||
-      items.length === 0 ||
-      !signature
-    ) {
+    if (!customer || !customerName || !deliveredTo || !Array.isArray(items) || items.length === 0 || !signature) {
       return res.status(400).json({ error: "שדות חובה חסרים" });
     }
 
-    // ולידציה לכמויות ומזהי מוצרים
+    // ולידציה + בדיקת מלאי
     for (const row of items) {
-      if (!row?.product) {
-        return res.status(400).json({ error: "חסר מזהה מוצר בשורה" });
-      }
+      if (!row?.product) return res.status(400).json({ error: "חסר מזהה מוצר בשורה" });
       const qty = Number(row.quantity);
-      if (!Number.isFinite(qty) || qty < 1) {
-        return res.status(400).json({ error: "כמות חייבת להיות מספר חיובי בשורה" });
-      }
-    }
+      if (!Number.isFinite(qty) || qty < 1)
+        return res.status(400).json({ error: "כמות חייבת להיות מספר חיובי" });
 
-    // 1) בדיקת מלאי לכל המוצרים
-    for (const row of items) {
       const prod = await getProductById(String(row.product));
-      if (!prod) {
-        return res.status(400).json({ error: `מוצר לא נמצא: ${String(row.product)}` });
-      }
-      const qty = Number(row.quantity);
+      if (!prod) return res.status(400).json({ error: `מוצר לא נמצא: ${String(row.product)}` });
+
       const stock = Number(prod.stock ?? 0);
       if (stock < qty) {
         return res.status(400).json({
@@ -119,12 +104,12 @@ router.post("/", async (req, res) => {
       }
     }
 
-    // 2) עדכון מלאי בפועל (רצוי בעסקה אם יש מרוצים)
+    // עדכון מלאי בפועל
     for (const row of items) {
       await updateProductStock(String(row.product), -Number(row.quantity));
     }
 
-    // 3) שמירת ניפוק
+    // שמירה
     const cleanItems = items.map((i) => ({
       product: String(i.product),
       quantity: Number(i.quantity),
@@ -153,7 +138,6 @@ router.post("/:id/receipt", async (req, res) => {
     let signature = req.body.signature;
     const delivery = await getDeliveryById(req.params.id);
     if (!delivery) return res.status(404).json({ error: "לא נמצא ניפוק" });
-
     if (!signature) signature = delivery.signature;
 
     // שם לקוח
@@ -167,7 +151,7 @@ router.post("/:id/receipt", async (req, res) => {
       }
     }
 
-    // פרטי מוצרים (שם + SKU)
+    // פרטי מוצרים: name, sku, quantity
     let products = [];
     try {
       products = await Promise.all(
@@ -176,11 +160,11 @@ router.post("/:id/receipt", async (req, res) => {
             const prod = await getProductById(item.product);
             return {
               name: prod?.name || "מוצר לא ידוע",
-              sku: prod?.sku || null,
+              sku: prod?.sku || "",
               quantity: item.quantity,
             };
           } catch {
-            return { name: "מוצר לא ידוע", sku: null, quantity: item.quantity };
+            return { name: "מוצר לא ידוע", sku: "", quantity: item.quantity };
           }
         })
       );
@@ -188,14 +172,15 @@ router.post("/:id/receipt", async (req, res) => {
       products = [];
     }
 
-    // פונט עברי
-    const fontPath = path.resolve(__dirname, "../fonts/noto.ttf"); // ודא שהנתיב קיים
+    // --- הכנת PDF ---
+    const fontPath = path.resolve(__dirname, "../fonts/noto.ttf"); // ודא שקיים
     const doc = new PDFDocument({ size: "A4", margin: 40 });
+
     try {
       doc.registerFont("hebrew", fontPath);
       doc.font("hebrew");
     } catch {
-      // אם אין פונט זמין, PDFKit ישתמש בברירת מחדל (ללא RTL תקין)
+      // אם אין פונט, עדיין נמשיך (פחות יפה ל-RTL)
     }
 
     const buffers = [];
@@ -207,16 +192,22 @@ router.post("/:id/receipt", async (req, res) => {
       res.send(pdfData);
     });
 
-    // כותרת ופרטים כלליים
+    // גבולות עמוד
+    const pageWidth = doc.page.width;
+    const pageHeight = doc.page.height;
+    const { left, right, top, bottom } = doc.page.margins;
+    const contentWidth = pageWidth - left - right;
+
+    // כותרת
     doc.fontSize(22);
     rtlText(doc, "קבלה על ניפוק מלאי");
-    doc.moveDown();
+    doc.moveDown(0.5);
 
-    doc.fontSize(16);
+    // פרטי לקוח/מקבל/תאריך
+    doc.fontSize(14);
     rtlText(doc, `לקוח: ${customerName}`);
     rtlText(doc, `נופק למי: ${delivery.deliveredTo || ""}`);
 
-    // תאריך — שימוש ב-normalizeDate + טיים־זון ישראל
     const d = normalizeDate(delivery.date);
     const dateText = d
       ? d.toLocaleString("he-IL", {
@@ -230,35 +221,99 @@ router.post("/:id/receipt", async (req, res) => {
       : "";
     rtlText(doc, `תאריך: ${dateText}`);
 
-    doc.moveDown();
-    doc.fontSize(18);
-    rtlText(doc, "מוצרים שנופקו:");
+    doc.moveDown(1);
 
-    doc.fontSize(15);
-    if (!products.length) {
-      rtlText(doc, "לא נבחרו מוצרים");
-    } else {
-      products.forEach((p, i) => {
-        const skuPart = p.sku ? ` [${p.sku}]` : "";
-        rtlText(doc, `${i + 1}. ${p.name}${skuPart} | כמות: ${p.quantity}`);
+    // ----- טבלת מוצרים: [מקט | שם מוצר | כמות] -----
+    // עמודות מימין לשמאל
+    const qtyW = 70;
+    const skuW = 120;
+    const nameW = Math.max(120, contentWidth - qtyW - skuW);
+
+    // מיושרות לימין (RTL): הקצה הימני של הטבלה
+    const tableRightX = pageWidth - right;
+    let y = doc.y + 6;
+    const rowH = 24;
+
+    const drawHeader = () => {
+      // רקע כותרת
+      doc.save();
+      doc.fillColor("#f0f0f0");
+      doc.rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH).fill();
+      doc.restore();
+
+      // מסגרת
+      doc.lineWidth(0.5).strokeColor("#888")
+        .rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH).stroke();
+
+      // טקסטים
+      doc.fontSize(12).fillColor("#000");
+      // כמות
+      doc.text("כמות", tableRightX - qtyW, y + 6, { width: qtyW - 6, align: "right" });
+      // שם מוצר (RTL)
+      rtlTextAt(doc, "שם מוצר", tableRightX - qtyW, y + 6, nameW - 6);
+      // מקט
+      doc.text("מקט", tableRightX - (qtyW + nameW + skuW) + 6, y + 6, { width: skuW - 6, align: "right" });
+
+      y += rowH;
+    };
+
+    const drawRow = (row) => {
+      // מעבר עמוד?
+      if (y + rowH > pageHeight - bottom) {
+        doc.addPage();
+        y = top;
+        drawHeader();
+      }
+
+      // מסגרת
+      doc.lineWidth(0.3).strokeColor("#ccc")
+        .rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH).stroke();
+
+      doc.fontSize(12).fillColor("#000");
+      // כמות
+      doc.text(String(row.quantity ?? ""), tableRightX - qtyW, y + 6, { width: qtyW - 6, align: "right" });
+      // שם מוצר (RTL)
+      rtlTextAt(doc, String(row.name ?? ""), tableRightX - qtyW, y + 6, nameW - 6);
+      // מקט
+      doc.text(String(row.sku || "—"), tableRightX - (qtyW + nameW + skuW) + 6, y + 6, {
+        width: skuW - 6,
+        align: "right",
       });
+
+      y += rowH;
+    };
+
+    // ציור הטבלה
+    drawHeader();
+    if (!products.length) {
+      // שורת "אין מוצרים"
+      doc.lineWidth(0.3).strokeColor("#ccc")
+        .rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH).stroke();
+      rtlTextAt(doc, "לא נבחרו מוצרים", tableRightX - qtyW, y + 6, nameW - 6);
+      y += rowH;
+    } else {
+      products.forEach(drawRow);
     }
 
-    doc.moveDown();
-    doc.fontSize(15);
-    rtlText(doc, "חתימה:");
+    // ריווח אחרי הטבלה
+    y += 8;
+    doc.moveTo(left, y);
+    doc.moveDown(2);
 
+    // חתימה
+    doc.fontSize(14);
+    rtlText(doc, "חתימה:");
     if (signature && typeof signature === "string" && signature.startsWith("data:image")) {
       const b64 = signature.replace(/^data:image\/\w+;base64,/, "");
       const sigBuffer = Buffer.from(b64, "base64");
-      // מיקמנו קודם את כותרת "חתימה:", עכשיו נשים את התמונה מיושרת לימין
-      const imgWidth = 150;
-      const x = doc.page.width - doc.page.margins.right - imgWidth;
-      const y = doc.y;
-      doc.image(sigBuffer, x, y, { width: imgWidth });
-      doc.moveDown(3);
+      const imgWidth = 160;
+      const x = pageWidth - right - imgWidth; // ימין לשמאל
+      const yImg = doc.y + 6;
+      doc.image(sigBuffer, x, yImg, { width: imgWidth });
+      doc.moveDown(4);
     } else {
       rtlText(doc, "__________________");
+      doc.moveDown(2);
     }
 
     doc.end();

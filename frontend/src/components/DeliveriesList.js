@@ -43,6 +43,33 @@ const formatDate = (date) => {
   });
 };
 
+// טבלת-מיני להצגת הפריטים של ניפוק אחד (SKU | שם מוצר | כמות)
+function ItemsMiniTable({ items, getName, getSku }) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return <Typography variant="body2" color="text.secondary">—</Typography>;
+  }
+  return (
+    <Table size="small" sx={{ direction: "rtl" }}>
+      <TableHead>
+        <TableRow>
+          <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>מקט</TableCell>
+          <TableCell align="right">שם מוצר</TableCell>
+          <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>כמות</TableCell>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {items.map((it, i) => (
+          <TableRow key={i}>
+            <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>{getSku(it.product) || "—"}</TableCell>
+            <TableCell align="right">{getName(it.product)}</TableCell>
+            <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>{it.quantity}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
 export default function DeliveriesList() {
   const [deliveries, setDeliveries] = useState([]);
   const [products, setProducts] = useState([]);
@@ -73,12 +100,14 @@ export default function DeliveriesList() {
   // מפה ID -> {name, sku} ל־O(1)
   const productMap = useMemo(() => {
     const m = new Map();
-    products.forEach((p) => m.set(String(p._id || p.id), { name: p.name, sku: p.sku }));
+    products.forEach((p) =>
+      m.set(String(p._id || p.id), { name: p.name, sku: p.sku || "" })
+    );
     return m;
   }, [products]);
 
   const getProductName = (id) => productMap.get(String(id))?.name || String(id);
-  const getProductSku = (id) => productMap.get(String(id))?.sku || null;
+  const getProductSku = (id) => productMap.get(String(id))?.sku || "";
 
   // רשימת לקוחות לבחירה
   const customerOptions = useMemo(
@@ -121,24 +150,21 @@ export default function DeliveriesList() {
     }
   };
 
-  // ייצוא לאקסל (כולל SKU)
+  // ייצוא לאקסל — מפריד עמודות SKU/שם/כמות (רשימות מופרדות בפסיקים)
   const exportToExcel = () => {
     const rows = [];
     groupedAndSorted.forEach((group) => {
       group.deliveries.forEach((d) => {
+        const itemSKUs = Array.isArray(d.items) ? d.items.map(it => getProductSku(it.product) || "—").join(", ") : "";
+        const itemNames = Array.isArray(d.items) ? d.items.map(it => getProductName(it.product)).join(", ") : "";
+        const itemQtys = Array.isArray(d.items) ? d.items.map(it => it.quantity).join(", ") : "";
         rows.push({
           "לקוח": group.customerName,
           "תאריך": formatDate(d.date),
           "למי נופק": d.deliveredTo || "",
-          "מוצרים": Array.isArray(d.items)
-            ? d.items
-                .map((item) => {
-                  const name = getProductName(item.product);
-                  const sku = getProductSku(item.product);
-                  return `${item.quantity} x ${name}${sku ? ` [${sku}]` : ""}`;
-                })
-                .join(", ")
-            : "",
+          "מקטים": itemSKUs,
+          "מוצרים": itemNames,
+          "כמויות": itemQtys,
           "חתימה": d.signature ? "כן" : "לא",
         });
       });
@@ -151,7 +177,7 @@ export default function DeliveriesList() {
   };
 
   return (
-    <Box sx={{ direction: "rtl", p: 3, maxWidth: 900, margin: "auto", textAlign: "right" }}>
+    <Box sx={{ direction: "rtl", p: 3, maxWidth: 1000, margin: "auto", textAlign: "right" }}>
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
         <Typography variant="h4" fontWeight="bold">רשימת ניפוקים לפי לקוח</Typography>
         <Button variant="contained" color="primary" onClick={exportToExcel}>
@@ -184,33 +210,31 @@ export default function DeliveriesList() {
           <Typography variant="h6" color="primary" mb={1}>
             {group.customerName}
           </Typography>
+
           <TableContainer component={Paper} elevation={2}>
             <Table sx={{ direction: "rtl" }}>
               <TableHead>
                 <TableRow>
                   <TableCell align="right">תאריך</TableCell>
                   <TableCell align="right">למי נופק</TableCell>
-                  <TableCell align="right">מוצרים</TableCell>
+                  <TableCell align="right">פריטים (מקט | שם מוצר | כמות)</TableCell>
                   <TableCell align="right">חתימה</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {group.deliveries.map((delivery, idx) => {
                   const key = delivery._id || delivery.id || `${group.customerName}-${idx}`;
-                  const itemsText = Array.isArray(delivery.items)
-                    ? delivery.items
-                        .map((item) => {
-                          const name = getProductName(item.product);
-                          const sku = getProductSku(item.product);
-                          return `${item.quantity} x ${name}${sku ? ` [${sku}]` : ""}`;
-                        })
-                        .join(", ")
-                    : "";
                   return (
-                    <TableRow key={key}>
+                    <TableRow key={key} hover>
                       <TableCell align="right">{formatDate(delivery.date)}</TableCell>
                       <TableCell align="right">{delivery.deliveredTo || "—"}</TableCell>
-                      <TableCell align="right">{itemsText}</TableCell>
+                      <TableCell align="right" sx={{ p: 1 }}>
+                        <ItemsMiniTable
+                          items={delivery.items}
+                          getName={getProductName}
+                          getSku={getProductSku}
+                        />
+                      </TableCell>
                       <TableCell align="right">
                         {delivery.signature ? (
                           <IconButton onClick={() => handleDownloadReceipt(delivery._id || delivery.id)}>
