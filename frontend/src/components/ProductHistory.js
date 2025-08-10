@@ -6,6 +6,7 @@ import { Box, Typography, List, ListItem, Divider } from "@mui/material";
 export default function ProductHistory({ productId }) {
   const [history, setHistory] = useState([]);
   const [productName, setProductName] = useState("");
+  const [productSku, setProductSku] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -13,11 +14,31 @@ export default function ProductHistory({ productId }) {
 
   useEffect(() => {
     let mounted = true;
+
+    const toDate = (date) => {
+      try {
+        if (!date) return null;
+        // תמיכה ב-Firestore Timestamp (seconds/nanoseconds או _seconds/_nanoseconds)
+        if (typeof date === "object") {
+          const sec = date.seconds ?? date._seconds;
+          const nsec = date.nanoseconds ?? date._nanoseconds ?? 0;
+          if (typeof sec === "number") {
+            return new Date(sec * 1000 + Math.floor(nsec / 1e6));
+          }
+        }
+        const d = new Date(date);
+        return Number.isNaN(d.getTime()) ? null : d;
+      } catch {
+        return null;
+      }
+    };
+
     const run = async () => {
       if (!productId) {
         if (!mounted) return;
         setHistory([]);
         setProductName("");
+        setProductSku("");
         setError("");
         return;
       }
@@ -27,35 +48,43 @@ export default function ProductHistory({ productId }) {
 
       const pid = asId(productId);
 
-      // 1) נסה לשלוף שם מוצר ישירות לפי מזהה; אם אין ראוט כזה — נפל לרשימה מלאה
+      // 1) שם + SKU של המוצר
       try {
-        let name = "";
+        let name = "", sku = "";
         try {
+          // אם יש ראוטר לפי מזהה
           const one = await api.get(`/api/products/${pid}`);
           name = one?.data?.name;
+          sku = one?.data?.sku;
         } catch {
+          // fallback: שלוף את כל המוצרים וחפש
           const all = await api.get("/api/products");
           const p = (all.data || []).find((x) => asId(x._id || x.id) === pid);
           name = p?.name || pid;
+          sku = p?.sku || "";
         }
-        if (mounted) setProductName(name || pid);
+        if (mounted) {
+          setProductName(name || pid);
+          setProductSku(sku || "");
+        }
       } catch {
-        if (mounted) setProductName(pid);
+        if (mounted) {
+          setProductName(pid);
+          setProductSku("");
+        }
       }
 
-      // 2) שלוף ניפוקים המכילים את המוצר
+      // 2) שלוף ניפוקים שמכילים את המוצר
       try {
         const res = await api.get("/api/deliveries", { params: { product: pid } });
         const list = Array.isArray(res.data) ? res.data : [];
 
-        // ודא שמופיעים רק ניפוקים שבאמת מכילים את המוצר
+        // ודא שמוצגים רק ניפוקים שבאמת מכילים את המוצר
         const filtered = list.filter(
-          (d) =>
-            Array.isArray(d.items) &&
-            d.items.some((i) => asId(i.product) === pid)
+          (d) => Array.isArray(d.items) && d.items.some((i) => asId(i.product) === pid)
         );
 
-        // מיין לפי תאריך יורד (חדש לישן), אם קיים תאריך
+        // מיין לפי תאריך יורד (חדש לישן)
         filtered.sort((a, b) => {
           const da = toDate(a?.date)?.getTime() ?? 0;
           const db = toDate(b?.date)?.getTime() ?? 0;
@@ -82,7 +111,6 @@ export default function ProductHistory({ productId }) {
   const toDate = (date) => {
     try {
       if (!date) return null;
-      // תמיכה ב-Firestore Timestamp (seconds/nanoseconds או _seconds/_nanoseconds)
       if (typeof date === "object") {
         const sec = date.seconds ?? date._seconds;
         const nsec = date.nanoseconds ?? date._nanoseconds ?? 0;
@@ -90,7 +118,6 @@ export default function ProductHistory({ productId }) {
           return new Date(sec * 1000 + Math.floor(nsec / 1e6));
         }
       }
-      // מחרוזת/מספר
       const d = new Date(date);
       return Number.isNaN(d.getTime()) ? null : d;
     } catch {
@@ -100,9 +127,16 @@ export default function ProductHistory({ productId }) {
 
   const formatDate = (date) => {
     const d = toDate(date);
-    return d ? d.toLocaleString("he-IL") : "";
-    // אם תרצה פורמט מדויק יותר:
-    // return d ? d.toLocaleString("he-IL", { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : "";
+    return d
+      ? d.toLocaleString("he-IL", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: "Asia/Jerusalem",
+        })
+      : "";
   };
 
   if (!productId) {
@@ -124,7 +158,7 @@ export default function ProductHistory({ productId }) {
   return (
     <Box sx={{ direction: "rtl", textAlign: "right", maxWidth: 600, margin: "auto" }}>
       <Typography variant="h6" mb={2} color="primary">
-        היסטוריית ניפוקים למוצר: {productName}
+        היסטוריית ניפוקים למוצר: {productName} {productSku ? ` [${productSku}]` : ""}
       </Typography>
       <List>
         {history.map((d, idx) => {
@@ -137,8 +171,7 @@ export default function ProductHistory({ productId }) {
               <React.Fragment key={key}>
                 <ListItem sx={{ display: "block" }}>
                   <Typography>
-                    <b>{formatDate(d.date)}</b> | לקוח:{" "}
-                    {d.customerName || d.customer?.name || "לא ידוע"} | כמות: {item.quantity}
+                    <b>{formatDate(d.date)}</b> | לקוח: {d.customerName || d.customer?.name || "לא ידוע"} | כמות: {item.quantity}
                   </Typography>
                 </ListItem>
                 {(idx < history.length - 1 || itemIdx < relevantItems.length - 1) && <Divider />}

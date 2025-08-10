@@ -4,8 +4,9 @@ import { api } from "../api";
 
 export default function AddProduct({ onAdd }) {
   const [name, setName] = useState("");
+  const [sku, setSku] = useState("");
   const [description, setDescription] = useState("");
-  const [stock, setStock] = useState(""); // שדה טקסט כדי להימנע מ-NaN בזמן עריכה
+  const [stock, setStock] = useState(""); // נשמר כטקסט כדי להימנע מ-NaN בזמן הקלדה
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
@@ -15,13 +16,18 @@ export default function AddProduct({ onAdd }) {
     setError("");
     setSuccess("");
 
-    // ולידציות בסיסיות
     const cleanName = (name || "").trim();
+    const cleanSku = (sku || "").trim().toUpperCase();
+    const qty = Number(stock);
+
     if (!cleanName) {
       setError("יש להזין שם מוצר");
       return;
     }
-    const qty = Number(stock);
+    if (!cleanSku) {
+      setError("יש להזין מקט (SKU)");
+      return;
+    }
     if (!Number.isFinite(qty) || qty < 0) {
       setError("כמות חייבת להיות מספר 0 ומעלה");
       return;
@@ -31,12 +37,14 @@ export default function AddProduct({ onAdd }) {
       setLoading(true);
       await api.post("/api/products", {
         name: cleanName,
+        sku: cleanSku,
         description: (description || "").trim(),
         stock: qty,
       });
 
       // איפוס טופס
       setName("");
+      setSku("");
       setDescription("");
       setStock("");
       setSuccess("המוצר נוסף בהצלחה");
@@ -66,6 +74,22 @@ export default function AddProduct({ onAdd }) {
           marginBottom: 10,
           boxSizing: "border-box",
           textAlign: "right",
+        }}
+      />
+
+      <input
+        placeholder="מקט (SKU)"
+        value={sku}
+        onChange={(e) => setSku(e.target.value.toUpperCase())}
+        required
+        style={{
+          width: "100%",
+          padding: 8,
+          marginBottom: 10,
+          boxSizing: "border-box",
+          textAlign: "right",
+          letterSpacing: 1,
+          fontFamily: "monospace",
         }}
       />
 

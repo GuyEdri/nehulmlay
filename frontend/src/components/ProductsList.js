@@ -75,7 +75,7 @@ export default function ProductsList() {
         </Typography>
         <TextField
           size="small"
-          placeholder="חפש מוצר..."
+          placeholder="חפש מוצר בשם או במקט..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           sx={{ minWidth: { xs: "100%", sm: 280 } }}
@@ -100,6 +100,9 @@ export default function ProductsList() {
                       <InventoryIcon fontSize="small" />
                       <Typography fontWeight="bold">{p.name}</Typography>
                     </Stack>
+                    <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
+                      מקט: <b>{p.sku || "—"}</b>
+                    </Typography>
                     {p.description && (
                       <Typography variant="body2" color="text.secondary">
                         {p.description}
@@ -141,23 +144,24 @@ export default function ProductsList() {
           <Table>
             <TableHead>
               <TableRow>
+                <TableCell align="right" sx={{ width: "12%" }}>מקט</TableCell>
                 <TableCell align="right" sx={{ width: "20%" }}>שם</TableCell>
                 <TableCell align="right" sx={{ width: "35%" }}>תיאור</TableCell>
                 <TableCell align="right" sx={{ width: "10%" }}>כמות</TableCell>
-                <TableCell align="right" sx={{ width: "20%" }}>עדכון מלאי</TableCell>
-                <TableCell align="right" sx={{ width: "10%" }}>היסטוריה</TableCell>
+                <TableCell align="right" sx={{ width: "18%" }}>עדכון מלאי</TableCell>
+                <TableCell align="right" sx={{ width: "5%" }}>היסטוריה</TableCell>
                 <TableCell align="right" sx={{ width: "5%" }}>מחיקה</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={6} align="center">טוען...</TableCell>
+                  <TableCell colSpan={7} align="center">טוען...</TableCell>
                 </TableRow>
               )}
               {noResults && (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ color: "text.secondary" }}>
+                  <TableCell colSpan={7} align="center" sx={{ color: "text.secondary" }}>
                     לא נמצאו מוצרים
                   </TableCell>
                 </TableRow>
@@ -167,6 +171,9 @@ export default function ProductsList() {
                 return (
                   <React.Fragment key={id}>
                     <TableRow hover>
+                      <TableCell align="right" sx={{ fontFamily: "monospace" }}>
+                        {p.sku || "—"}
+                      </TableCell>
                       <TableCell align="right">{p.name}</TableCell>
                       <TableCell align="right" sx={{ color: "text.secondary" }}>
                         {p.description}
@@ -189,7 +196,7 @@ export default function ProductsList() {
 
                     {selectedProduct === id && (
                       <TableRow>
-                        <TableCell colSpan={6} sx={{ background: "#fafafa" }}>
+                        <TableCell colSpan={7} sx={{ background: "#fafafa" }}>
                           <ProductHistory productId={id} />
                         </TableCell>
                       </TableRow>

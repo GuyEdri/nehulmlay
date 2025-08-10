@@ -1,5 +1,5 @@
 // frontend/src/components/IssueStock.js
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { api } from "../api";
 import SimpleSignaturePad from "./SignaturePad";
 import {
@@ -39,10 +39,9 @@ export default function IssueStock({ onIssued }) {
           api.get("/api/customers"),
         ]);
         if (!mounted) return;
-        setProducts(prodsRes.data || []);
-        setCustomers(custsRes.data || []);
-      } catch (e) {
-        // לא מפוצץ את המסך אם אין נתונים
+        setProducts(Array.isArray(prodsRes.data) ? prodsRes.data : []);
+        setCustomers(Array.isArray(custsRes.data) ? custsRes.data : []);
+      } catch {
         if (!mounted) return;
         setProducts([]);
         setCustomers([]);
@@ -52,6 +51,12 @@ export default function IssueStock({ onIssued }) {
       mounted = false;
     };
   }, []);
+
+  const sortedProducts = useMemo(() => {
+    return [...products].sort((a, b) =>
+      String(a.name || "").localeCompare(String(b.name || ""), "he")
+    );
+  }, [products]);
 
   const handleItemChange = (idx, field, value) => {
     const newItems = [...items];
@@ -100,7 +105,7 @@ export default function IssueStock({ onIssued }) {
       return;
     }
 
-    // ולידציה אופציונלית: כמות מול מלאי (בקליינט)
+    // בדיקת כמות מול מלאי (בקליינט, אופציונלי)
     const productMap = new Map(
       products.map((p) => [String(p._id || p.id), p])
     );
@@ -116,9 +121,8 @@ export default function IssueStock({ onIssued }) {
       setLoading(true);
 
       const cleanItems = items.map((i) => ({
-        ...i,
-        quantity: Number(i.quantity),
         product: String(i.product),
+        quantity: Number(i.quantity),
       }));
 
       // שליפת שם הלקוח לפי ה-ID
@@ -242,13 +246,13 @@ export default function IssueStock({ onIssued }) {
                     sx={{ direction: "rtl", textAlign: "right" }}
                     inputProps={{ id: `product-select-input-${idx}` }}
                   >
-                    {products.map((p) => (
+                    {sortedProducts.map((p) => (
                       <MenuItem
                         key={p._id || p.id}
                         value={String(p._id || p.id)}
                         sx={{ direction: "rtl" }}
                       >
-                        {p.name} (במלאי: {p.stock})
+                        {p.sku ? `[${p.sku}] ` : ""}{p.name} (במלאי: {p.stock})
                       </MenuItem>
                     ))}
                   </Select>
@@ -280,7 +284,6 @@ export default function IssueStock({ onIssued }) {
 
             <Box sx={{ direction: "rtl", textAlign: "right" }}>
               <Typography mb={1}>חתימה דיגיטלית (חובה):</Typography>
-              {/* SimpleSignaturePad אמור לקרוא ל-onEnd עם dataURL של התמונה */}
               <SimpleSignaturePad onEnd={setSignature} />
             </Box>
 

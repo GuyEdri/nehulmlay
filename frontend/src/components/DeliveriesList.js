@@ -7,8 +7,8 @@ import {
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import _ from "lodash";
-import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
-import IconButton from '@mui/material/IconButton';
+import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
+import IconButton from "@mui/material/IconButton";
 import { api } from "../api";
 
 // עוזרים להמרת תאריך מכל פורמט נפוץ
@@ -65,56 +65,49 @@ export default function DeliveriesList() {
         setProducts([]);
       }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  // מפה לשמות מוצרים ל־O(1)
-  const productNameMap = useMemo(() => {
+  // מפה ID -> {name, sku} ל־O(1)
+  const productMap = useMemo(() => {
     const m = new Map();
-    products.forEach(p => m.set(String(p._id || p.id), p.name));
+    products.forEach((p) => m.set(String(p._id || p.id), { name: p.name, sku: p.sku }));
     return m;
   }, [products]);
 
-  const getProductName = (id) => productNameMap.get(String(id)) || String(id);
+  const getProductName = (id) => productMap.get(String(id))?.name || String(id);
+  const getProductSku = (id) => productMap.get(String(id))?.sku || null;
 
   // רשימת לקוחות לבחירה
   const customerOptions = useMemo(
-    () => _.uniq(deliveries.map(d => d.customerName).filter(Boolean)).sort(),
+    () => _.uniq(deliveries.map((d) => d.customerName).filter(Boolean)).sort(),
     [deliveries]
   );
 
   // סינון לפי לקוח (אם נבחר)
   const filteredDeliveries = useMemo(
-    () => (selectedCustomer
-      ? deliveries.filter(d => d.customerName === selectedCustomer)
-      : deliveries),
+    () => (selectedCustomer ? deliveries.filter((d) => d.customerName === selectedCustomer) : deliveries),
     [deliveries, selectedCustomer]
   );
 
   // קיבוץ לפי לקוח ומיון פנימי לפי תאריך יורד
   const groupedAndSorted = useMemo(() => {
     return _(filteredDeliveries)
-      .groupBy(d => d.customerName || "ללא שם לקוח")
+      .groupBy((d) => d.customerName || "ללא שם לקוח")
       .map((items, customerName) => ({
         customerName,
-        deliveries: _.orderBy(
-          items,
-          d => (toDate(d?.date)?.getTime() ?? 0),
-          ["desc"]
-        ),
+        deliveries: _.orderBy(items, (d) => toDate(d?.date)?.getTime() ?? 0, ["desc"]),
       }))
-      .orderBy('customerName', ['asc'])
+      .orderBy("customerName", ["asc"])
       .value();
   }, [filteredDeliveries]);
 
   // הורדת קבלה PDF
   const handleDownloadReceipt = async (deliveryId) => {
     try {
-      const res = await api.post(
-        `/api/deliveries/${deliveryId}/receipt`,
-        {},
-        { responseType: "blob" }
-      );
+      const res = await api.post(`/api/deliveries/${deliveryId}/receipt`, {}, { responseType: "blob" });
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement("a");
       link.href = url;
@@ -128,17 +121,23 @@ export default function DeliveriesList() {
     }
   };
 
-  // ייצוא לאקסל
+  // ייצוא לאקסל (כולל SKU)
   const exportToExcel = () => {
     const rows = [];
-    groupedAndSorted.forEach(group => {
-      group.deliveries.forEach(d => {
+    groupedAndSorted.forEach((group) => {
+      group.deliveries.forEach((d) => {
         rows.push({
           "לקוח": group.customerName,
           "תאריך": formatDate(d.date),
           "למי נופק": d.deliveredTo || "",
           "מוצרים": Array.isArray(d.items)
-            ? d.items.map(item => `${item.quantity} x ${getProductName(item.product)}`).join(", ")
+            ? d.items
+                .map((item) => {
+                  const name = getProductName(item.product);
+                  const sku = getProductSku(item.product);
+                  return `${item.quantity} x ${name}${sku ? ` [${sku}]` : ""}`;
+                })
+                .join(", ")
             : "",
           "חתימה": d.signature ? "כן" : "לא",
         });
@@ -166,19 +165,21 @@ export default function DeliveriesList() {
           labelId="customer-filter-label"
           value={selectedCustomer}
           label="סנן לפי לקוח"
-          onChange={e => setSelectedCustomer(e.target.value)}
+          onChange={(e) => setSelectedCustomer(e.target.value)}
           sx={{ direction: "rtl", textAlign: "right" }}
         >
           <MenuItem value="">הצג הכל</MenuItem>
-          {customerOptions.map(cn =>
-            <MenuItem value={cn} key={cn}>{cn}</MenuItem>
-          )}
+          {customerOptions.map((cn) => (
+            <MenuItem value={cn} key={cn}>
+              {cn}
+            </MenuItem>
+          ))}
         </Select>
       </FormControl>
 
       <Divider sx={{ mb: 2, clear: "both" }} />
 
-      {groupedAndSorted.map(group => (
+      {groupedAndSorted.map((group) => (
         <Box key={group.customerName} mb={4}>
           <Typography variant="h6" color="primary" mb={1}>
             {group.customerName}
@@ -197,9 +198,13 @@ export default function DeliveriesList() {
                 {group.deliveries.map((delivery, idx) => {
                   const key = delivery._id || delivery.id || `${group.customerName}-${idx}`;
                   const itemsText = Array.isArray(delivery.items)
-                    ? delivery.items.map((item) =>
-                        `${item.quantity} x ${getProductName(item.product)}`
-                      ).join(", ")
+                    ? delivery.items
+                        .map((item) => {
+                          const name = getProductName(item.product);
+                          const sku = getProductSku(item.product);
+                          return `${item.quantity} x ${name}${sku ? ` [${sku}]` : ""}`;
+                        })
+                        .join(", ")
                     : "";
                   return (
                     <TableRow key={key}>

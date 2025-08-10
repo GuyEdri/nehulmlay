@@ -42,14 +42,11 @@ const normalizeDate = (x) => {
  * 1) מנקים רווחים מיותרים.
  * 2) הופכים את סדר המילים כדי שיראו RTL.
  * 3) מוסיפים סימון RTL בתחילת השורה.
- * הערה: מסייע מאוד לטקסט עברי פשוט, כולל ערכים מעורבים (מספרים/אנגלית),
- * ועדיף עשרות מונים על טקסט “צמוד”/הפוך.
  */
 const rtlText = (doc, text, options = {}) => {
   const rtlMark = "\u200F";
   const str = (text ?? "").toString().replace(/\s+/g, " ").trim();
-  const fixed =
-    str.length === 0 ? "" : rtlMark + str.split(" ").reverse().join(" ");
+  const fixed = str.length === 0 ? "" : rtlMark + str.split(" ").reverse().join(" ");
   doc.text(fixed, { align: "right", ...options });
 };
 
@@ -170,16 +167,20 @@ router.post("/:id/receipt", async (req, res) => {
       }
     }
 
-    // פרטי מוצרים
+    // פרטי מוצרים (שם + SKU)
     let products = [];
     try {
       products = await Promise.all(
         (delivery.items || []).map(async (item) => {
           try {
             const prod = await getProductById(item.product);
-            return { name: prod?.name || "מוצר לא ידוע", quantity: item.quantity };
+            return {
+              name: prod?.name || "מוצר לא ידוע",
+              sku: prod?.sku || null,
+              quantity: item.quantity,
+            };
           } catch {
-            return { name: "מוצר לא ידוע", quantity: item.quantity };
+            return { name: "מוצר לא ידוע", sku: null, quantity: item.quantity };
           }
         })
       );
@@ -238,7 +239,8 @@ router.post("/:id/receipt", async (req, res) => {
       rtlText(doc, "לא נבחרו מוצרים");
     } else {
       products.forEach((p, i) => {
-        rtlText(doc, `${i + 1}. ${p.name} | כמות: ${p.quantity}`);
+        const skuPart = p.sku ? ` [${p.sku}]` : "";
+        rtlText(doc, `${i + 1}. ${p.name}${skuPart} | כמות: ${p.quantity}`);
       });
     }
 
