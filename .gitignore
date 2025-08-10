@@ -1,2 +1,5 @@
 backend/firebase-service-account.json
 backend/.env
+
+# Firebase service account
+backend/firebase-service-account.json
