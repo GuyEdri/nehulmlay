@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+// frontend/src/components/DeliveriesList.js
+import React, { useEffect, useState, useMemo } from "react";
 import {
   Box, Button, Typography, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Paper, Stack, Divider, FormControl, InputLabel, Select, MenuItem
@@ -8,50 +9,105 @@ import { saveAs } from "file-saver";
 import _ from "lodash";
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import IconButton from '@mui/material/IconButton';
-
-// שימוש ב-client המשותף
 import { api } from "../api";
+
+// עוזרים להמרת תאריך מכל פורמט נפוץ
+const toDate = (date) => {
+  try {
+    if (!date) return null;
+    // Firestore Timestamp (seconds/nanoseconds או _seconds/_nanoseconds)
+    if (typeof date === "object") {
+      const sec = date.seconds ?? date._seconds;
+      const nsec = date.nanoseconds ?? date._nanoseconds ?? 0;
+      if (typeof sec === "number") {
+        return new Date(sec * 1000 + Math.floor(nsec / 1e6));
+      }
+    }
+    // ISO/string/number
+    const d = new Date(date);
+    return Number.isNaN(d.getTime()) ? null : d;
+  } catch {
+    return null;
+  }
+};
+
+const formatDate = (date) => {
+  const d = toDate(date);
+  if (!d) return "—";
+  return d.toLocaleString("he-IL", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
 
 export default function DeliveriesList() {
   const [deliveries, setDeliveries] = useState([]);
   const [products, setProducts] = useState([]);
-  const [selectedCustomer, setSelectedCustomer] = useState(""); // לקוח שנבחר לפילטר
+  const [selectedCustomer, setSelectedCustomer] = useState("");
 
   useEffect(() => {
-    // טען ניפוקים ומוצרים
-    Promise.all([
-      api.get("/api/deliveries"),
-      api.get("/api/products"),
-    ])
-      .then(([delsRes, prodsRes]) => {
+    let mounted = true;
+    (async () => {
+      try {
+        const [delsRes, prodsRes] = await Promise.all([
+          api.get("/api/deliveries"),
+          api.get("/api/products"),
+        ]);
+        if (!mounted) return;
         setDeliveries(Array.isArray(delsRes.data) ? delsRes.data : []);
         setProducts(Array.isArray(prodsRes.data) ? prodsRes.data : []);
-      })
-      .catch(() => {
+      } catch {
+        if (!mounted) return;
         setDeliveries([]);
         setProducts([]);
-      });
+      }
+    })();
+    return () => { mounted = false; };
   }, []);
 
-  const getProductName = (id) => {
-    const product = products.find(p => String(p._id || p.id) === String(id));
-    return product ? product.name : id;
-  };
+  // מפה לשמות מוצרים ל־O(1)
+  const productNameMap = useMemo(() => {
+    const m = new Map();
+    products.forEach(p => m.set(String(p._id || p.id), p.name));
+    return m;
+  }, [products]);
 
-  const formatDate = (date) => {
-    if (!date) return "";
-    if (typeof date === "string" || typeof date === "number") {
-      try { return new Date(date).toLocaleString('he-IL'); }
-      catch { return ""; }
-    }
-    if (date.seconds) {
-      try { return new Date(date.seconds * 1000).toLocaleString('he-IL'); }
-      catch { return ""; }
-    }
-    return "";
-  };
+  const getProductName = (id) => productNameMap.get(String(id)) || String(id);
 
-  // כפתור להורדת קבלה PDF
+  // רשימת לקוחות לבחירה
+  const customerOptions = useMemo(
+    () => _.uniq(deliveries.map(d => d.customerName).filter(Boolean)).sort(),
+    [deliveries]
+  );
+
+  // סינון לפי לקוח (אם נבחר)
+  const filteredDeliveries = useMemo(
+    () => (selectedCustomer
+      ? deliveries.filter(d => d.customerName === selectedCustomer)
+      : deliveries),
+    [deliveries, selectedCustomer]
+  );
+
+  // קיבוץ לפי לקוח ומיון פנימי לפי תאריך יורד
+  const groupedAndSorted = useMemo(() => {
+    return _(filteredDeliveries)
+      .groupBy(d => d.customerName || "ללא שם לקוח")
+      .map((items, customerName) => ({
+        customerName,
+        deliveries: _.orderBy(
+          items,
+          d => (toDate(d?.date)?.getTime() ?? 0),
+          ["desc"]
+        ),
+      }))
+      .orderBy('customerName', ['asc'])
+      .value();
+  }, [filteredDeliveries]);
+
+  // הורדת קבלה PDF
   const handleDownloadReceipt = async (deliveryId) => {
     try {
       const res = await api.post(
@@ -72,43 +128,23 @@ export default function DeliveriesList() {
     }
   };
 
-  // כל הלקוחות הקיימים ברשימה (ל-drop down)
-  const customerOptions = _.uniq(deliveries.map(d => d.customerName)).filter(Boolean);
-
-  // סינון לפי לקוח שנבחר (או הכל)
-  const filteredDeliveries = selectedCustomer
-    ? deliveries.filter(d => d.customerName === selectedCustomer)
-    : deliveries;
-
-  // קיבוץ ומיון לפי לקוח ותאריך
-  const groupedAndSorted = _(filteredDeliveries)
-    .groupBy('customerName')
-    .map((items, customerName) => ({
-      customerName,
-      deliveries: _.orderBy(
-        items,
-        d => (d?.date?.seconds ? d.date.seconds * 1000 : (new Date(d.date).getTime() || 0)),
-        ['desc']
-      )
-    }))
-    .orderBy('customerName', ['asc'])
-    .value();
-
   // ייצוא לאקסל
   const exportToExcel = () => {
-    const allRows = [];
+    const rows = [];
     groupedAndSorted.forEach(group => {
       group.deliveries.forEach(d => {
-        allRows.push({
-          'לקוח': group.customerName,
-          'תאריך': formatDate(d.date),
-          'למי נופק': d.deliveredTo,
-          'מוצרים': d.items.map(item => `${item.quantity} x ${getProductName(item.product)}`).join(', '),
-          'חתימה': d.signature ? 'כן' : 'לא'
+        rows.push({
+          "לקוח": group.customerName,
+          "תאריך": formatDate(d.date),
+          "למי נופק": d.deliveredTo || "",
+          "מוצרים": Array.isArray(d.items)
+            ? d.items.map(item => `${item.quantity} x ${getProductName(item.product)}`).join(", ")
+            : "",
+          "חתימה": d.signature ? "כן" : "לא",
         });
       });
     });
-    const ws = XLSX.utils.json_to_sheet(allRows);
+    const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "ניפוקים");
     const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
@@ -141,6 +177,7 @@ export default function DeliveriesList() {
       </FormControl>
 
       <Divider sx={{ mb: 2, clear: "both" }} />
+
       {groupedAndSorted.map(group => (
         <Box key={group.customerName} mb={4}>
           <Typography variant="h6" color="primary" mb={1}>
@@ -157,34 +194,36 @@ export default function DeliveriesList() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {group.deliveries.map((delivery, idx) => (
-                  <TableRow key={delivery._id || delivery.id || idx}>
-                    <TableCell align="right">
-                      {formatDate(delivery.date)}
-                    </TableCell>
-                    <TableCell align="right">{delivery.deliveredTo}</TableCell>
-                    <TableCell align="right">
-                      {delivery.items.map((item, i) =>
-                        <span key={i}>{item.quantity} x {getProductName(item.product)}</span>
-                      ).reduce((prev, curr) => [prev, ', ', curr])}
-                    </TableCell>
-                    <TableCell align="right">
-                      {delivery.signature
-                        ? (
+                {group.deliveries.map((delivery, idx) => {
+                  const key = delivery._id || delivery.id || `${group.customerName}-${idx}`;
+                  const itemsText = Array.isArray(delivery.items)
+                    ? delivery.items.map((item) =>
+                        `${item.quantity} x ${getProductName(item.product)}`
+                      ).join(", ")
+                    : "";
+                  return (
+                    <TableRow key={key}>
+                      <TableCell align="right">{formatDate(delivery.date)}</TableCell>
+                      <TableCell align="right">{delivery.deliveredTo || "—"}</TableCell>
+                      <TableCell align="right">{itemsText}</TableCell>
+                      <TableCell align="right">
+                        {delivery.signature ? (
                           <IconButton onClick={() => handleDownloadReceipt(delivery._id || delivery.id)}>
                             <PictureAsPdfIcon color="error" />
                           </IconButton>
-                        )
-                        : <span>—</span>
-                      }
-                    </TableCell>
-                  </TableRow>
-                ))}
+                        ) : (
+                          <span>—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </TableContainer>
         </Box>
       ))}
+
       {groupedAndSorted.length === 0 && (
         <Typography color="text.secondary" textAlign="center" mt={8}>
           לא נמצאו ניפוקים

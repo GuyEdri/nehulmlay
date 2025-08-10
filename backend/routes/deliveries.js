@@ -20,6 +20,22 @@ const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// ---- עזר: נירמול תאריך מכל פורמט ----
+const normalizeDate = (x) => {
+  try {
+    if (!x) return null;
+    const sec = x?.seconds ?? x?._seconds;
+    const nsec = x?.nanoseconds ?? x?._nanoseconds ?? 0;
+    if (typeof sec === "number") {
+      return new Date(sec * 1000 + Math.floor(nsec / 1e6));
+    }
+    const d = new Date(x);
+    return Number.isNaN(d.getTime()) ? null : d;
+  } catch {
+    return null;
+  }
+};
+
 // GET /api/deliveries?product=productId
 router.get("/", async (req, res) => {
   try {
@@ -47,8 +63,7 @@ router.get("/:id", async (req, res) => {
 // POST /api/deliveries
 router.post("/", async (req, res) => {
   try {
-    const { customer, customerName, deliveredTo, items, signature, date } =
-      req.body;
+    const { customer, customerName, deliveredTo, items, signature, date } = req.body;
 
     // שים לב: בגלל חתימה ב־base64 צריך להגדיל את limit של express.json באפליקציה הראשית (למשל 5mb)
     // app.use(express.json({ limit: '5mb' }));
@@ -71,9 +86,7 @@ router.post("/", async (req, res) => {
       }
       const qty = Number(row.quantity);
       if (!Number.isFinite(qty) || qty < 1) {
-        return res
-          .status(400)
-          .json({ error: "כמות חייבת להיות מספר חיובי בשורה" });
+        return res.status(400).json({ error: "כמות חייבת להיות מספר חיובי בשורה" });
       }
     }
 
@@ -81,9 +94,7 @@ router.post("/", async (req, res) => {
     for (const row of items) {
       const prod = await getProductById(String(row.product));
       if (!prod) {
-        return res
-          .status(400)
-          .json({ error: `מוצר לא נמצא: ${String(row.product)}` });
+        return res.status(400).json({ error: `מוצר לא נמצא: ${String(row.product)}` });
       }
       const qty = Number(row.quantity);
       const stock = Number(prod.stock ?? 0);
@@ -94,9 +105,7 @@ router.post("/", async (req, res) => {
       }
     }
 
-    // 2) עדכון מלאי בפועל
-    // הערה: אידאלי לבצע זאת בעסקה (transaction) כדי למנוע מרוצים במקביל.
-    // אם יש לכם wrapper ב-firestoreService לעסקאות — עדיף להשתמש בו.
+    // 2) עדכון מלאי בפועל (רצוי בעסקה אם יש מרוצים)
     for (const row of items) {
       await updateProductStock(String(row.product), -Number(row.quantity));
     }
@@ -131,11 +140,9 @@ router.post("/:id/receipt", async (req, res) => {
     const delivery = await getDeliveryById(req.params.id);
     if (!delivery) return res.status(404).json({ error: "לא נמצא ניפוק" });
 
-    if (!signature) {
-      signature = delivery.signature;
-    }
+    if (!signature) signature = delivery.signature;
 
-    // שליפת שם הלקוח (אם לא נשלח כבר כשדה בניפוק)
+    // שם לקוח
     let customerName = delivery.customerName || "";
     if (!customerName && delivery.customer) {
       try {
@@ -146,17 +153,14 @@ router.post("/:id/receipt", async (req, res) => {
       }
     }
 
-    // שליפת פרטי מוצרים
+    // פרטי מוצרים
     let products = [];
     try {
       products = await Promise.all(
         (delivery.items || []).map(async (item) => {
           try {
             const prod = await getProductById(item.product);
-            return {
-              name: prod?.name || "מוצר לא ידוע",
-              quantity: item.quantity,
-            };
+            return { name: prod?.name || "מוצר לא ידוע", quantity: item.quantity };
           } catch {
             return { name: "מוצר לא ידוע", quantity: item.quantity };
           }
@@ -167,7 +171,7 @@ router.post("/:id/receipt", async (req, res) => {
     }
 
     // פונט עברי
-    const fontPath = path.resolve(__dirname, "../fonts/noto.ttf"); // התאם את הנתיב לפי הפרויקט
+    const fontPath = path.resolve(__dirname, "../fonts/noto.ttf"); // עדכן נתיב לפי הפרויקט
     const doc = new PDFDocument({ size: "A4", margin: 40 });
     try {
       doc.registerFont("hebrew", fontPath);
@@ -181,41 +185,29 @@ router.post("/:id/receipt", async (req, res) => {
     doc.on("end", () => {
       const pdfData = Buffer.concat(buffers);
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        // שומר על שם קובץ באנגלית כדי להימנע מבעיות קידוד בכרום
-        "attachment; filename=receipt.pdf"
-      );
+      res.setHeader("Content-Disposition", "attachment; filename=receipt.pdf");
       res.send(pdfData);
     });
 
-    // סימון RTL
     const rtl = "\u200F";
 
-    // כותרת
-    doc.fontSize(22).text(`${rtl}קבלה על ניפוק מלאי`, { align: "right" });
-    doc.moveDown();
-
-    // פרטים כלליים
+    // כותרת ופרטים כלליים
+    doc.fontSize(22).text(`${rtl}קבלה על ניפוק מלאי`, { align: "right" }).moveDown();
     doc.fontSize(16).text(`${rtl}לקוח: ${customerName}`, { align: "right" });
-    doc.text(`${rtl}נופק למי: ${delivery.deliveredTo}`, { align: "right" });
+    doc.text(`${rtl}נופק למי: ${delivery.deliveredTo || ""}`, { align: "right" });
 
-    // תאריך
-    let dateText = "";
-    try {
-      const d = new Date(delivery.date);
-      if (!Number.isNaN(d.getTime())) {
-        dateText = d.toLocaleString("he-IL", {
+    // תאריך — שימוש ב-normalizeDate + טיים־זון ישראל
+    const d = normalizeDate(delivery.date);
+    const dateText = d
+      ? d.toLocaleString("he-IL", {
           day: "2-digit",
           month: "2-digit",
           year: "numeric",
           hour: "2-digit",
           minute: "2-digit",
-        });
-      }
-    } catch {
-      dateText = "";
-    }
+          timeZone: "Asia/Jerusalem",
+        })
+      : "";
     doc.text(`${rtl}תאריך: ${dateText}`, { align: "right" });
 
     doc.moveDown();
@@ -225,27 +217,16 @@ router.post("/:id/receipt", async (req, res) => {
       doc.fontSize(14).text(`${rtl}לא נבחרו מוצרים`, { align: "right" });
     } else {
       products.forEach((p, i) => {
-        doc
-          .fontSize(15)
-          .text(
-            `${rtl}${i + 1}. ${p.name}   |   כמות: ${p.quantity}`,
-            { align: "right" }
-          );
+        doc.fontSize(15).text(`${rtl}${i + 1}. ${p.name}   |   כמות: ${p.quantity}`, { align: "right" });
       });
     }
 
     doc.moveDown();
     doc.fontSize(15).text(`${rtl}חתימה:`, { align: "right" });
 
-    // החתימה בבסיס64 (תומך png/jpg)
-    if (
-      signature &&
-      typeof signature === "string" &&
-      signature.startsWith("data:image")
-    ) {
+    if (signature && typeof signature === "string" && signature.startsWith("data:image")) {
       const b64 = signature.replace(/^data:image\/\w+;base64,/, "");
       const sigBuffer = Buffer.from(b64, "base64");
-      // מציב את החתימה בקצה הימני
       const x = doc.page.width - 200;
       const y = doc.y;
       doc.image(sigBuffer, x, y, { width: 150 });

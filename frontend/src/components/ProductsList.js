@@ -1,27 +1,37 @@
 // frontend/src/components/ProductsList.js
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { api } from "../api";
 import UpdateStock from "./UpdateStock";
 import ProductHistory from "./ProductHistory";
+
+import {
+  Box, Typography, TextField, IconButton, Button, Divider,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
+  Stack, useMediaQuery
+} from "@mui/material";
+import DeleteIcon from "@mui/icons-material/Delete";
+import HistoryIcon from "@mui/icons-material/History";
+import InventoryIcon from "@mui/icons-material/Inventory";
+import { useTheme } from "@mui/material/styles";
 
 export default function ProductsList() {
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm")); // <600px
 
   const pid = (p) => String(p._id || p.id);
 
-  // טעינת מוצרים (מסוננים לפי חיפוש)
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
-      setError("");
       const res = await api.get("/api/products", { params: { search } });
       setProducts(res.data || []);
     } catch (err) {
-      setError(err?.response?.data?.error || "שגיאה בטעינת מוצרים");
+      console.error(err);
       setProducts([]);
     } finally {
       setLoading(false);
@@ -50,104 +60,148 @@ export default function ProductsList() {
     }
   };
 
+  const noResults = useMemo(() => !loading && products.length === 0, [loading, products]);
+
   return (
-    <div style={{ direction: "rtl", textAlign: "right" }}>
-      <h3>רשימת מוצרים</h3>
-
-      <input
-        placeholder="חפש מוצר..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        style={{
-          marginBottom: "10px",
-          width: "100%",
-          padding: "8px",
-          boxSizing: "border-box",
-          textAlign: "right",
-        }}
-      />
-
-      {error && (
-        <div style={{ color: "red", marginBottom: 10, fontWeight: "bold" }}>{error}</div>
-      )}
-
-      {loading && <div style={{ marginBottom: 10 }}>טוען...</div>}
-
-      <table
-        border="1"
-        cellPadding="8"
-        style={{
-          width: "100%",
-          borderCollapse: "collapse",
-          direction: "rtl",
-          textAlign: "right",
-        }}
+    <Box sx={{ direction: "rtl", textAlign: "right", p: 2 }}>
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={2}
+        alignItems={{ xs: "stretch", sm: "center" }}
+        mb={2}
       >
-        <thead>
-          <tr>
-            <th>שם</th>
-            <th>תיאור</th>
-            <th>כמות</th>
-            <th>עדכון מלאי</th>
-            <th>היסטוריה</th>
-            <th>מחיקה</th>
-          </tr>
-        </thead>
-        <tbody>
-          {products.length === 0 ? (
-            <tr>
-              <td colSpan={6} style={{ textAlign: "center", color: "#666" }}>
-                {loading ? "טוען..." : "לא נמצאו מוצרים"}
-              </td>
-            </tr>
-          ) : (
-            products.map((p) => {
-              const id = pid(p);
-              return (
-                <React.Fragment key={id}>
-                  <tr>
-                    <td>{p.name}</td>
-                    <td>{p.description}</td>
-                    <td>{p.stock}</td>
-                    <td>
-                      <UpdateStock productId={id} onUpdate={fetchProducts} />
-                    </td>
-                    <td>
-                      <button onClick={() => handleShowHistory(id)}>
-                        {selectedProduct === id ? "הסתר" : "הצג היסטוריה"}
-                      </button>
-                    </td>
-                    <td>
-                      <button
-                        onClick={() => handleDelete(id)}
-                        style={{
-                          color: "white",
-                          background: "red",
-                          border: "none",
-                          borderRadius: "5px",
-                          padding: "4px 10px",
-                          cursor: "pointer",
-                        }}
-                        disabled={loading}
-                      >
-                        מחק
-                      </button>
-                    </td>
-                  </tr>
-                  {selectedProduct === id && (
-                    <tr>
-                      <td colSpan={6} style={{ background: "#f7f7f7" }}>
-                        <ProductHistory productId={id} />
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              );
-            })
-          )}
-        </tbody>
-      </table>
-    </div>
+        <Typography variant="h5" fontWeight="bold" sx={{ flex: 1 }}>
+          רשימת מוצרים
+        </Typography>
+        <TextField
+          size="small"
+          placeholder="חפש מוצר..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ minWidth: { xs: "100%", sm: 280 } }}
+          inputProps={{ style: { textAlign: "right" } }}
+        />
+      </Stack>
+
+      {/* מובייל: כרטיסים; דסקטופ: טבלה */}
+      {isMobile ? (
+        <Stack spacing={1}>
+          {loading && <Typography>טוען...</Typography>}
+          {noResults && <Typography color="text.secondary">לא נמצאו מוצרים</Typography>}
+
+          {products.map((p) => {
+            const id = pid(p);
+            const open = selectedProduct === id;
+            return (
+              <Paper key={id} elevation={2} sx={{ p: 1.5 }}>
+                <Stack direction="row" alignItems="center" spacing={1} justifyContent="space-between">
+                  <Stack spacing={0.3} sx={{ flex: 1 }}>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <InventoryIcon fontSize="small" />
+                      <Typography fontWeight="bold">{p.name}</Typography>
+                    </Stack>
+                    {p.description && (
+                      <Typography variant="body2" color="text.secondary">
+                        {p.description}
+                      </Typography>
+                    )}
+                    <Typography variant="body2">
+                      כמות במלאי: <b>{p.stock}</b>
+                    </Typography>
+                  </Stack>
+
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <UpdateStock productId={id} onUpdate={fetchProducts} />
+                    <IconButton aria-label="היסטוריה" onClick={() => handleShowHistory(id)} size="small">
+                      <HistoryIcon />
+                    </IconButton>
+                    <IconButton
+                      aria-label="מחק"
+                      onClick={() => handleDelete(id)}
+                      color="error"
+                      size="small"
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </Stack>
+                </Stack>
+
+                {open && (
+                  <>
+                    <Divider sx={{ my: 1 }} />
+                    <ProductHistory productId={id} />
+                  </>
+                )}
+              </Paper>
+            );
+          })}
+        </Stack>
+      ) : (
+        <TableContainer component={Paper} elevation={2}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell align="right" sx={{ width: "20%" }}>שם</TableCell>
+                <TableCell align="right" sx={{ width: "35%" }}>תיאור</TableCell>
+                <TableCell align="right" sx={{ width: "10%" }}>כמות</TableCell>
+                <TableCell align="right" sx={{ width: "20%" }}>עדכון מלאי</TableCell>
+                <TableCell align="right" sx={{ width: "10%" }}>היסטוריה</TableCell>
+                <TableCell align="right" sx={{ width: "5%" }}>מחיקה</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {loading && (
+                <TableRow>
+                  <TableCell colSpan={6} align="center">טוען...</TableCell>
+                </TableRow>
+              )}
+              {noResults && (
+                <TableRow>
+                  <TableCell colSpan={6} align="center" sx={{ color: "text.secondary" }}>
+                    לא נמצאו מוצרים
+                  </TableCell>
+                </TableRow>
+              )}
+              {products.map((p) => {
+                const id = pid(p);
+                return (
+                  <React.Fragment key={id}>
+                    <TableRow hover>
+                      <TableCell align="right">{p.name}</TableCell>
+                      <TableCell align="right" sx={{ color: "text.secondary" }}>
+                        {p.description}
+                      </TableCell>
+                      <TableCell align="right"><b>{p.stock}</b></TableCell>
+                      <TableCell align="right">
+                        <UpdateStock productId={id} onUpdate={fetchProducts} />
+                      </TableCell>
+                      <TableCell align="right">
+                        <Button size="small" onClick={() => handleShowHistory(id)}>
+                          {selectedProduct === id ? "הסתר" : "הצג היסטוריה"}
+                        </Button>
+                      </TableCell>
+                      <TableCell align="right">
+                        <IconButton onClick={() => handleDelete(id)} color="error">
+                          <DeleteIcon />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+
+                    {selectedProduct === id && (
+                      <TableRow>
+                        <TableCell colSpan={6} sx={{ background: "#fafafa" }}>
+                          <ProductHistory productId={id} />
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+    </Box>
   );
 }
 
