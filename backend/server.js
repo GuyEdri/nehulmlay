@@ -1,25 +1,83 @@
-import express from 'express';
-import cors from 'cors';
+// backend/server.js
+import express from "express";
+import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
 
-// ייבוא ראוטרים שהגדרת (מותאמים ל-Firebase Firestore)
-import customersRouter from './routes/customers.js';
-import productsRouter from './routes/products.js';
-import deliveriesRouter from './routes/deliveries.js';
+import customersRouter from "./routes/customers.js";
+import productsRouter from "./routes/products.js";
+import deliveriesRouter from "./routes/deliveries.js";
 
 const app = express();
 
-// Middlewares
-app.use(cors());
-app.use(express.json());
+// ESM-safe __dirname (שימושי אם תשרת קבצים סטטיים/פונטים)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// שימוש בראוטרים (המסלולים של ה-API)
-app.use('/api/customers', customersRouter);
-app.use('/api/products', productsRouter);
-app.use('/api/deliveries', deliveriesRouter);
+// ----- Middleware -----
 
-// הפעלת השרת על פורט 5000
+// הגדלת ה-limit בגלל חתימות base64
+app.use(express.json({ limit: "5mb" }));
+
+// CORS: מקורות מותרים מתוך משתנה סביבה או ברירות מחדל ל־localhost/Render
+const defaultWhitelist = [
+  /^http:\/\/localhost:\d+$/,         // dev
+  /\.onrender\.com$/                  // Render
+];
+
+const envWhitelist = (process.env.FRONTEND_URL || "")
+  .split(",")
+  .map(s => s.trim())
+  .filter(Boolean);
+
+const whitelist = [
+  ...envWhitelist,     // מחרוזות מלאות מ-FRONTEND_URL (אפשר כמה מופרדים בפסיק)
+  ...defaultWhitelist, // רג׳אקסים
+];
+
+app.use(
+  cors({
+    origin(origin, cb) {
+      // מאפשר גם כלים ללא Origin (curl/Postman)
+      if (!origin) return cb(null, true);
+      const ok = whitelist.some(rule =>
+        typeof rule === "string" ? rule === origin : rule.test(origin)
+      );
+      return ok ? cb(null, true) : cb(new Error("Not allowed by CORS"));
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  })
+);
+
+// (אופציונלי) סטטי – אם תרצה לשרת פונטים/קבצים:
+app.use("/static", express.static(path.resolve(__dirname, "public")));
+
+// ----- Routes -----
+app.use("/api/customers", customersRouter);
+app.use("/api/products", productsRouter);
+app.use("/api/deliveries", deliveriesRouter);
+
+// בריאות/בדיקות
+app.get("/healthz", (req, res) => res.status(200).json({ ok: true }));
+app.get("/", (req, res) => res.status(200).send("UGDA98 backend is up"));
+
+// 404 גנרי ל-API
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api/")) {
+    return res.status(404).json({ error: "Not Found" });
+  }
+  next();
+});
+
+// טיפול שגיאות בסיסי
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err);
+  res.status(500).json({ error: err.message || "Internal Server Error" });
+});
+
+// ----- Start -----
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
 });
 
