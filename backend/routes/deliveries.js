@@ -36,6 +36,23 @@ const normalizeDate = (x) => {
   }
 };
 
+/**
+ * ---- עזר: הדפסת טקסט עברי תקין ל-PDFKit ----
+ * PDFKit לא תומך RTL, אז:
+ * 1) מנקים רווחים מיותרים.
+ * 2) הופכים את סדר המילים כדי שיראו RTL.
+ * 3) מוסיפים סימון RTL בתחילת השורה.
+ * הערה: מסייע מאוד לטקסט עברי פשוט, כולל ערכים מעורבים (מספרים/אנגלית),
+ * ועדיף עשרות מונים על טקסט “צמוד”/הפוך.
+ */
+const rtlText = (doc, text, options = {}) => {
+  const rtlMark = "\u200F";
+  const str = (text ?? "").toString().replace(/\s+/g, " ").trim();
+  const fixed =
+    str.length === 0 ? "" : rtlMark + str.split(" ").reverse().join(" ");
+  doc.text(fixed, { align: "right", ...options });
+};
+
 // GET /api/deliveries?product=productId
 router.get("/", async (req, res) => {
   try {
@@ -65,7 +82,7 @@ router.post("/", async (req, res) => {
   try {
     const { customer, customerName, deliveredTo, items, signature, date } = req.body;
 
-    // שים לב: בגלל חתימה ב־base64 צריך להגדיל את limit של express.json באפליקציה הראשית (למשל 5mb)
+    // שים לב: בגלל חתימה ב-base64 צריך להגדיל את limit ב-server.js:
     // app.use(express.json({ limit: '5mb' }));
 
     if (
@@ -171,7 +188,7 @@ router.post("/:id/receipt", async (req, res) => {
     }
 
     // פונט עברי
-    const fontPath = path.resolve(__dirname, "../fonts/noto.ttf"); // עדכן נתיב לפי הפרויקט
+    const fontPath = path.resolve(__dirname, "../fonts/noto.ttf"); // ודא שהנתיב קיים
     const doc = new PDFDocument({ size: "A4", margin: 40 });
     try {
       doc.registerFont("hebrew", fontPath);
@@ -189,12 +206,14 @@ router.post("/:id/receipt", async (req, res) => {
       res.send(pdfData);
     });
 
-    const rtl = "\u200F";
-
     // כותרת ופרטים כלליים
-    doc.fontSize(22).text(`${rtl}קבלה על ניפוק מלאי`, { align: "right" }).moveDown();
-    doc.fontSize(16).text(`${rtl}לקוח: ${customerName}`, { align: "right" });
-    doc.text(`${rtl}נופק למי: ${delivery.deliveredTo || ""}`, { align: "right" });
+    doc.fontSize(22);
+    rtlText(doc, "קבלה על ניפוק מלאי");
+    doc.moveDown();
+
+    doc.fontSize(16);
+    rtlText(doc, `לקוח: ${customerName}`);
+    rtlText(doc, `נופק למי: ${delivery.deliveredTo || ""}`);
 
     // תאריך — שימוש ב-normalizeDate + טיים־זון ישראל
     const d = normalizeDate(delivery.date);
@@ -208,31 +227,36 @@ router.post("/:id/receipt", async (req, res) => {
           timeZone: "Asia/Jerusalem",
         })
       : "";
-    doc.text(`${rtl}תאריך: ${dateText}`, { align: "right" });
+    rtlText(doc, `תאריך: ${dateText}`);
 
     doc.moveDown();
-    doc.fontSize(18).text(`${rtl}מוצרים שנופקו:`, { align: "right" });
+    doc.fontSize(18);
+    rtlText(doc, "מוצרים שנופקו:");
 
+    doc.fontSize(15);
     if (!products.length) {
-      doc.fontSize(14).text(`${rtl}לא נבחרו מוצרים`, { align: "right" });
+      rtlText(doc, "לא נבחרו מוצרים");
     } else {
       products.forEach((p, i) => {
-        doc.fontSize(15).text(`${rtl}${i + 1}. ${p.name}   |   כמות: ${p.quantity}`, { align: "right" });
+        rtlText(doc, `${i + 1}. ${p.name} | כמות: ${p.quantity}`);
       });
     }
 
     doc.moveDown();
-    doc.fontSize(15).text(`${rtl}חתימה:`, { align: "right" });
+    doc.fontSize(15);
+    rtlText(doc, "חתימה:");
 
     if (signature && typeof signature === "string" && signature.startsWith("data:image")) {
       const b64 = signature.replace(/^data:image\/\w+;base64,/, "");
       const sigBuffer = Buffer.from(b64, "base64");
-      const x = doc.page.width - 200;
+      // מיקמנו קודם את כותרת "חתימה:", עכשיו נשים את התמונה מיושרת לימין
+      const imgWidth = 150;
+      const x = doc.page.width - doc.page.margins.right - imgWidth;
       const y = doc.y;
-      doc.image(sigBuffer, x, y, { width: 150 });
+      doc.image(sigBuffer, x, y, { width: imgWidth });
       doc.moveDown(3);
     } else {
-      doc.text(`${rtl}__________________`, { align: "right" });
+      rtlText(doc, "__________________");
     }
 
     doc.end();
