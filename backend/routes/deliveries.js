@@ -77,7 +77,7 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// POST /api/dלiveries
+// POST /api/deliveries
 router.post("/", async (req, res) => {
   try {
     const { customer, customerName, deliveredTo, items, signature, date } = req.body;
