@@ -39,6 +39,7 @@ const normalizeDate = (x) => {
 /**
  * ---- עזרי RTL ל-PDFKit ----
  * pdfkit לא תומך RTL; לכן הופכים סדר מילים ומיישרים לימין.
+ * NBSP (\u00A0) בתוך מילים “דביקות” נשמר ולא נחתך.
  */
 const rtlText = (doc, text, options = {}) => {
   const rtlMark = "\u200F";
@@ -47,9 +48,9 @@ const rtlText = (doc, text, options = {}) => {
   doc.text(fixed, { align: "right", ...options });
 };
 
-// הדפסת RTL בנקודה עם רוחב מוגדר, כאשר xRight הוא הקצה הימני של הבלוק.
+// הדפסת RTL בנקודה עם רוחב מוגדר (xRight = הקצה הימני של הבלוק).
 const rtlTextAt = (doc, text, xRight, y, width) => {
-  doc.text("", xRight - width, y); // הזזת הסמן
+  doc.text("", xRight - width, y);
   rtlText(doc, text, { width, align: "right" });
 };
 
@@ -57,7 +58,7 @@ const rtlTextAt = (doc, text, xRight, y, width) => {
 router.get("/", async (req, res) => {
   try {
     const productId = req.query.product || null;
-    const deliveries = await getAllDeliveries(productId); // אם השירות מתעלם מהפרמטר, הסינון יתבצע בפרונט
+    const deliveries = await getAllDeliveries(productId);
     res.json(deliveries);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -68,9 +69,7 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const delivery = await getDeliveryById(req.params.id);
-    if (!delivery) {
-      return res.status(404).json({ error: "ניפוק לא נמצא" });
-    }
+    if (!delivery) return res.status(404).json({ error: "ניפוק לא נמצא" });
     res.json(delivery);
   } catch (err) {
     res.status(404).json({ error: err.message });
@@ -90,12 +89,11 @@ router.post("/", async (req, res) => {
     for (const row of items) {
       if (!row?.product) return res.status(400).json({ error: "חסר מזהה מוצר בשורה" });
       const qty = Number(row.quantity);
-      if (!Number.isFinite(qty) || qty < 1)
+      if (!Number.isFinite(qty) || qty < 1) {
         return res.status(400).json({ error: "כמות חייבת להיות מספר חיובי" });
-
+      }
       const prod = await getProductById(String(row.product));
       if (!prod) return res.status(400).json({ error: `מוצר לא נמצא: ${String(row.product)}` });
-
       const stock = Number(prod.stock ?? 0);
       if (stock < qty) {
         return res.status(400).json({
@@ -134,7 +132,6 @@ router.post("/", async (req, res) => {
 // PDF RECEIPT - POST /api/deliveries/:id/receipt
 router.post("/:id/receipt", async (req, res) => {
   try {
-    // אם לא נשלחה חתימה בבקשה — נשתמש בזו ששמורה בניפוק
     let signature = req.body.signature;
     const delivery = await getDeliveryById(req.params.id);
     if (!delivery) return res.status(404).json({ error: "לא נמצא ניפוק" });
@@ -179,9 +176,7 @@ router.post("/:id/receipt", async (req, res) => {
     try {
       doc.registerFont("hebrew", fontPath);
       doc.font("hebrew");
-    } catch {
-      // אם אין פונט, עדיין נמשיך (פחות יפה ל-RTL)
-    }
+    } catch {}
 
     const buffers = [];
     doc.on("data", buffers.push.bind(buffers));
@@ -192,18 +187,18 @@ router.post("/:id/receipt", async (req, res) => {
       res.send(pdfData);
     });
 
-    // גבולות עמוד
+    // גבולות
     const pageWidth = doc.page.width;
     const pageHeight = doc.page.height;
     const { left, right, top, bottom } = doc.page.margins;
     const contentWidth = pageWidth - left - right;
 
-    // כותרת — NBSP רק בין "קבלה" ל"על"
+    // כותרת — רווח קשיח בין "קבלה" ל"על"
     doc.fontSize(22);
     rtlText(doc, "קבלה\u00A0על ניפוק מלאי");
     doc.moveDown(0.5);
 
-    // פרטי לקוח/מקבל/תאריך — NBSP רק בין "נופק" ל"ל"
+    // פרטי לקוח/מקבל/תאריך — רווח קשיח בין "נופק" ל"ל"
     doc.fontSize(14);
     rtlText(doc, `לקוח: ${customerName}`);
     rtlText(doc, `נופק\u00A0ל: ${delivery.deliveredTo || ""}`);
@@ -243,7 +238,8 @@ router.post("/:id/receipt", async (req, res) => {
 
       doc.fontSize(12).fillColor("#000");
       doc.text("כמות", tableRightX - qtyW, y + 6, { width: qtyW - 6, align: "right" });
-      rtlTextAt(doc, "שם מוצר", tableRightX - qtyW, y + 6, nameW - 6);
+      // NBSP כדי שלא ידבק: "שם מוצר"
+      rtlTextAt(doc, "שם\u00A0מוצר", tableRightX - qtyW, y + 6, nameW - 6);
       doc.text("מקט", tableRightX - (qtyW + nameW + skuW) + 6, y + 6, { width: skuW - 6, align: "right" });
 
       y += rowH;
@@ -311,9 +307,7 @@ router.put("/:id", async (req, res) => {
   try {
     const updates = req.body || {};
     const updated = await updateDelivery(req.params.id, updates);
-    if (!updated) {
-      return res.status(404).json({ error: "ניפוק לא נמצא" });
-    }
+    if (!updated) return res.status(404).json({ error: "ניפוק לא נמצא" });
     res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });
