@@ -3,10 +3,10 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
-
 import customersRouter from "./routes/customers.js";
 import productsRouter from "./routes/products.js";
 import deliveriesRouter from "./routes/deliveries.js";
+import { verifyAuth } from './middleware/auth.js';
 
 const app = express();
 
