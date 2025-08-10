@@ -1,4 +1,4 @@
-// firebaseAdmin.js
+// backend/firebaseAdmin.js
 import 'dotenv/config';
 import admin from 'firebase-admin';
 
@@ -15,7 +15,9 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
 
+// ייצוא שירותי Firebase Admin
+const adminAuth = admin.auth();
 const db = admin.firestore();
 
-export { admin, db };
+export { adminAuth, db };
 
