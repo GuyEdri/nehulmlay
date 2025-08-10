@@ -1,4 +1,3 @@
-guy@GuyUbuntu:~/ugda98/backend/routes$ cat deliveries.js 
 // backend/routes/deliveries.js
 import express from "express";
 import PDFDocument from "pdfkit";
@@ -199,15 +198,15 @@ router.post("/:id/receipt", async (req, res) => {
     const { left, right, top, bottom } = doc.page.margins;
     const contentWidth = pageWidth - left - right;
 
-    // כותרת
+    // כותרת — רווח כפול בין "קבלה" ל"על"
     doc.fontSize(22);
-    rtlText(doc, "קבלה על ניפוק מלאי ");
+    rtlText(doc, "קבלה  על ניפוק מלאי");
     doc.moveDown(0.5);
 
-    // פרטי לקוח/מקבל/תאריך
+    // פרטי לקוח/מקבל/תאריך — רווח כפול בין "נופק" ל"ל:"
     doc.fontSize(14);
     rtlText(doc, `לקוח: ${customerName}`);
-    rtlText(doc,  ` נופק ל: ${delivery.deliveredTo || ""}`);
+    rtlText(doc, `נופק  ל: ${delivery.deliveredTo || ""}`);
 
     const d = normalizeDate(delivery.date);
     const dateText = d
@@ -349,3 +348,4 @@ router.delete("/:id", async (req, res) => {
 });
 
 export default router;
+
