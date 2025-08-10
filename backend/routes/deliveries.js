@@ -1,4 +1,3 @@
-guy@GuyUbuntu:~/ugda98/backend/routes$ cat deliveries.js 
 // backend/routes/deliveries.js
 import express from "express";
 import PDFDocument from "pdfkit";
@@ -78,7 +77,7 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// POST /api/deliveries
+// POST /api/dלiveries
 router.post("/", async (req, res) => {
   try {
     const { customer, customerName, deliveredTo, items, signature, date } = req.body;
@@ -199,15 +198,15 @@ router.post("/:id/receipt", async (req, res) => {
     const { left, right, top, bottom } = doc.page.margins;
     const contentWidth = pageWidth - left - right;
 
-    // כותרת
+    // כותרת — NBSP רק בין "קבלה" ל"על"
     doc.fontSize(22);
-    rtlText(doc, "קבלה על ניפוק מלאי ");
+    rtlText(doc, "קבלה\u00A0על ניפוק מלאי");
     doc.moveDown(0.5);
 
-    // פרטי לקוח/מקבל/תאריך
+    // פרטי לקוח/מקבל/תאריך — NBSP רק בין "נופק" ל"ל"
     doc.fontSize(14);
     rtlText(doc, `לקוח: ${customerName}`);
-    rtlText(doc,  ` נופק ל : ${delivery.deliveredTo || ""}`);
+    rtlText(doc, `נופק\u00A0ל: ${delivery.deliveredTo || ""}`);
 
     const d = normalizeDate(delivery.date);
     const dateText = d
@@ -225,57 +224,44 @@ router.post("/:id/receipt", async (req, res) => {
     doc.moveDown(1);
 
     // ----- טבלת מוצרים: [מקט | שם מוצר | כמות] -----
-    // עמודות מימין לשמאל
     const qtyW = 70;
     const skuW = 120;
     const nameW = Math.max(120, contentWidth - qtyW - skuW);
 
-    // מיושרות לימין (RTL): הקצה הימני של הטבלה
     const tableRightX = pageWidth - right;
     let y = doc.y + 6;
     const rowH = 24;
 
     const drawHeader = () => {
-      // רקע כותרת
       doc.save();
       doc.fillColor("#f0f0f0");
       doc.rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH).fill();
       doc.restore();
 
-      // מסגרת
       doc.lineWidth(0.5).strokeColor("#888")
         .rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH).stroke();
 
-      // טקסטים
       doc.fontSize(12).fillColor("#000");
-      // כמות
       doc.text("כמות", tableRightX - qtyW, y + 6, { width: qtyW - 6, align: "right" });
-      // שם מוצר (RTL)
       rtlTextAt(doc, "שם מוצר", tableRightX - qtyW, y + 6, nameW - 6);
-      // מקט
       doc.text("מקט", tableRightX - (qtyW + nameW + skuW) + 6, y + 6, { width: skuW - 6, align: "right" });
 
       y += rowH;
     };
 
     const drawRow = (row) => {
-      // מעבר עמוד?
       if (y + rowH > pageHeight - bottom) {
         doc.addPage();
         y = top;
         drawHeader();
       }
 
-      // מסגרת
       doc.lineWidth(0.3).strokeColor("#ccc")
         .rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH).stroke();
 
       doc.fontSize(12).fillColor("#000");
-      // כמות
       doc.text(String(row.quantity ?? ""), tableRightX - qtyW, y + 6, { width: qtyW - 6, align: "right" });
-      // שם מוצר (RTL)
       rtlTextAt(doc, String(row.name ?? ""), tableRightX - qtyW, y + 6, nameW - 6);
-      // מקט
       doc.text(String(row.sku || "—"), tableRightX - (qtyW + nameW + skuW) + 6, y + 6, {
         width: skuW - 6,
         align: "right",
@@ -284,10 +270,8 @@ router.post("/:id/receipt", async (req, res) => {
       y += rowH;
     };
 
-    // ציור הטבלה
     drawHeader();
     if (!products.length) {
-      // שורת "אין מוצרים"
       doc.lineWidth(0.3).strokeColor("#ccc")
         .rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH).stroke();
       rtlTextAt(doc, "לא נבחרו מוצרים", tableRightX - qtyW, y + 6, nameW - 6);
@@ -296,19 +280,17 @@ router.post("/:id/receipt", async (req, res) => {
       products.forEach(drawRow);
     }
 
-    // ריווח אחרי הטבלה
     y += 8;
     doc.moveTo(left, y);
     doc.moveDown(2);
 
-    // חתימה
     doc.fontSize(14);
     rtlText(doc, "חתימה:");
     if (signature && typeof signature === "string" && signature.startsWith("data:image")) {
       const b64 = signature.replace(/^data:image\/\w+;base64,/, "");
       const sigBuffer = Buffer.from(b64, "base64");
       const imgWidth = 160;
-      const x = pageWidth - right - imgWidth; // ימין לשמאל
+      const x = pageWidth - right - imgWidth;
       const yImg = doc.y + 6;
       doc.image(sigBuffer, x, yImg, { width: imgWidth });
       doc.moveDown(4);
@@ -349,3 +331,4 @@ router.delete("/:id", async (req, res) => {
 });
 
 export default router;
+
