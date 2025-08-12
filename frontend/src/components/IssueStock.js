@@ -24,7 +24,7 @@ export default function IssueStock({ onIssued }) {
   const [customers, setCustomers] = useState([]);
   const [customer, setCustomer] = useState("");
   const [deliveredTo, setDeliveredTo] = useState("");
-  const [personalNumber, setPersonalNumber] = useState(""); // חדש: מספר אישי
+  const [personalNumber, setPersonalNumber] = useState("");
   const [items, setItems] = useState([{ product: "", quantity: 1 }]);
   const [signature, setSignature] = useState(null);
   const [error, setError] = useState("");
@@ -109,7 +109,7 @@ export default function IssueStock({ onIssued }) {
       return;
     }
 
-    // בדיקת כמות מול מלאי (בקליינט, אופציונלי)
+    // בדיקת כמות מול מלאי
     const productMap = new Map(
       products.map((p) => [String(p._id || p.id), p])
     );
@@ -141,7 +141,7 @@ export default function IssueStock({ onIssued }) {
         deliveredTo,
         customer: String(customer),
         customerName,
-        personalNumber: personalNumber.trim(), // חדש: עובר לשרת
+        personalNumber: personalNumber.trim(),
       };
 
       await api.post("/api/deliveries", body);
@@ -149,7 +149,7 @@ export default function IssueStock({ onIssued }) {
       setSuccess("ניפוק בוצע בהצלחה");
       setCustomer("");
       setDeliveredTo("");
-      setPersonalNumber(""); // איפוס
+      setPersonalNumber("");
       setItems([{ product: "", quantity: 1 }]);
       setSignature(null);
       if (onIssued) onIssued();
@@ -161,8 +161,27 @@ export default function IssueStock({ onIssued }) {
   };
 
   return (
-    <div>
-      <h1 style={{ textAlign: "center" }}>חטיבה 551</h1>
+    <Box 
+      dir="rtl" 
+      sx={{ 
+        direction: "rtl",
+        textAlign: "right",
+        fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif"
+      }}
+    >
+      <Typography 
+        variant="h3" 
+        component="h1"
+        sx={{ 
+          textAlign: "center", 
+          mb: 3,
+          fontWeight: "bold",
+          color: "#1976d2"
+        }}
+      >
+        חטיבה 551
+      </Typography>
+      
       <Paper
         elevation={3}
         sx={{
@@ -171,7 +190,6 @@ export default function IssueStock({ onIssued }) {
           margin: "auto",
           direction: "rtl",
           textAlign: "right",
-          position: "relative",
         }}
       >
         <Typography
@@ -184,12 +202,16 @@ export default function IssueStock({ onIssued }) {
           ניפוק מלאי ללקוח
         </Typography>
 
-        <form onSubmit={handleIssue}>
-          <Stack spacing={3}>
-            <FormControl fullWidth required>
+        <form onSubmit={handleIssue} dir="rtl">
+          <Stack spacing={3} dir="rtl">
+            <FormControl fullWidth required dir="rtl">
               <InputLabel
                 id="customer-select-label"
-                sx={{ direction: "rtl", textAlign: "right" }}
+                sx={{ 
+                  right: 14,
+                  left: "auto",
+                  transformOrigin: "right"
+                }}
               >
                 בחר לקוח
               </InputLabel>
@@ -200,14 +222,40 @@ export default function IssueStock({ onIssued }) {
                 value={customer}
                 label="בחר לקוח"
                 onChange={(e) => setCustomer(e.target.value)}
-                sx={{ direction: "rtl", textAlign: "right" }}
-                inputProps={{ id: "customer-select-input" }}
+                sx={{ 
+                  "& .MuiSelect-select": {
+                    textAlign: "right",
+                    direction: "rtl"
+                  },
+                  "& .MuiOutlinedInput-notchedOutline": {
+                    textAlign: "right"
+                  }
+                }}
+                MenuProps={{
+                  anchorOrigin: {
+                    vertical: "bottom",
+                    horizontal: "right",
+                  },
+                  transformOrigin: {
+                    vertical: "top",
+                    horizontal: "right",
+                  },
+                  PaperProps: {
+                    sx: {
+                      direction: "rtl"
+                    }
+                  }
+                }}
               >
                 {customers.map((c) => (
                   <MenuItem
                     key={c._id || c.id}
                     value={String(c._id || c.id)}
-                    sx={{ direction: "rtl" }}
+                    sx={{ 
+                      direction: "rtl", 
+                      justifyContent: "flex-start",
+                      textAlign: "right"
+                    }}
                   >
                     {c.name}
                   </MenuItem>
@@ -221,33 +269,56 @@ export default function IssueStock({ onIssued }) {
               onChange={(e) => setDeliveredTo(e.target.value)}
               required
               fullWidth
-              sx={{ direction: "rtl", textAlign: "right" }}
-              inputProps={{ style: { textAlign: "right" } }}
+              dir="rtl"
+              sx={{ 
+                "& .MuiInputBase-input": {
+                  textAlign: "right",
+                  direction: "rtl"
+                },
+                "& .MuiInputLabel-root": {
+                  right: 14,
+                  left: "auto",
+                  transformOrigin: "right"
+                }
+              }}
             />
 
-            {/* חדש: מספר אישי */}
             <TextField
               label="מספר אישי"
               value={personalNumber}
               onChange={(e) => setPersonalNumber(e.target.value)}
               required
               fullWidth
-              sx={{ direction: "rtl", textAlign: "right" }}
-              inputProps={{ style: { textAlign: "right" } }}
+              dir="rtl"
+              sx={{ 
+                "& .MuiInputBase-input": {
+                  textAlign: "right",
+                  direction: "rtl"
+                },
+                "& .MuiInputLabel-root": {
+                  right: 14,
+                  left: "auto",
+                  transformOrigin: "right"
+                }
+              }}
             />
 
             {items.map((item, idx) => (
               <Stack
                 key={idx}
-                direction="row"
+                direction="row-reverse"
                 spacing={2}
                 alignItems="center"
-                justifyContent="space-between"
+                sx={{ direction: "rtl" }}
               >
-                <FormControl sx={{ flex: 1 }} required>
+                <FormControl sx={{ flex: 1 }} required dir="rtl">
                   <InputLabel
                     id={`product-select-label-${idx}`}
-                    sx={{ direction: "rtl", textAlign: "right" }}
+                    sx={{ 
+                      right: 14,
+                      left: "auto",
+                      transformOrigin: "right"
+                    }}
                   >
                     בחר מוצר
                   </InputLabel>
@@ -260,14 +331,37 @@ export default function IssueStock({ onIssued }) {
                     onChange={(e) =>
                       handleItemChange(idx, "product", e.target.value)
                     }
-                    sx={{ direction: "rtl", textAlign: "right" }}
-                    inputProps={{ id: `product-select-input-${idx}` }}
+                    sx={{ 
+                      "& .MuiSelect-select": {
+                        textAlign: "right",
+                        direction: "rtl"
+                      }
+                    }}
+                    MenuProps={{
+                      anchorOrigin: {
+                        vertical: "bottom",
+                        horizontal: "right",
+                      },
+                      transformOrigin: {
+                        vertical: "top",
+                        horizontal: "right",
+                      },
+                      PaperProps: {
+                        sx: {
+                          direction: "rtl"
+                        }
+                      }
+                    }}
                   >
                     {sortedProducts.map((p) => (
                       <MenuItem
                         key={p._id || p.id}
                         value={String(p._id || p.id)}
-                        sx={{ direction: "rtl" }}
+                        sx={{ 
+                          direction: "rtl", 
+                          justifyContent: "flex-start",
+                          textAlign: "right"
+                        }}
                       >
                         {p.sku ? `[${p.sku}] ` : ""}{p.name} (במלאי: {p.stock})
                       </MenuItem>
@@ -278,29 +372,53 @@ export default function IssueStock({ onIssued }) {
                 <TextField
                   label="כמות"
                   type="number"
-                  inputProps={{ min: 1, style: { textAlign: "right" } }}
+                  inputProps={{ min: 1 }}
                   value={item.quantity}
                   onChange={(e) =>
                     handleItemChange(idx, "quantity", e.target.value)
                   }
                   required
-                  sx={{ width: 120 }}
+                  dir="rtl"
+                  sx={{ 
+                    width: 120,
+                    "& .MuiInputBase-input": {
+                      textAlign: "center"
+                    },
+                    "& .MuiInputLabel-root": {
+                      right: 14,
+                      left: "auto",
+                      transformOrigin: "right"
+                    }
+                  }}
                 />
 
                 {items.length > 1 && (
-                  <IconButton color="error" onClick={() => handleRemoveItem(idx)}>
+                  <IconButton 
+                    color="error" 
+                    onClick={() => handleRemoveItem(idx)}
+                    sx={{ mr: 1 }}
+                  >
                     <DeleteIcon />
                   </IconButton>
                 )}
               </Stack>
             ))}
 
-            <Button variant="contained" onClick={handleAddItem} sx={{ mt: 1 }}>
+            <Button 
+              variant="contained" 
+              onClick={handleAddItem} 
+              sx={{ 
+                mt: 1,
+                fontWeight: "bold"
+              }}
+            >
               הוסף מוצר נוסף
             </Button>
 
             <Box sx={{ direction: "rtl", textAlign: "right" }}>
-              <Typography mb={1}>חתימה דיגיטלית (חובה):</Typography>
+              <Typography mb={1} fontWeight="bold">
+                חתימה דיגיטלית (חובה):
+              </Typography>
               <SimpleSignaturePad onEnd={setSignature} />
             </Box>
 
@@ -310,7 +428,11 @@ export default function IssueStock({ onIssued }) {
               color="success"
               fullWidth
               size="large"
-              sx={{ fontWeight: "bold" }}
+              sx={{ 
+                fontWeight: "bold",
+                fontSize: "1.2rem",
+                py: 1.5
+              }}
               disabled={loading}
             >
               {loading ? (
@@ -321,19 +443,18 @@ export default function IssueStock({ onIssued }) {
             </Button>
 
             {error && (
-              <Alert severity="error" dir="rtl">
+              <Alert severity="error" dir="rtl" sx={{ textAlign: "right" }}>
                 {error}
               </Alert>
             )}
             {success && (
-              <Alert severity="success" dir="rtl">
+              <Alert severity="success" dir="rtl" sx={{ textAlign: "right" }}>
                 {success}
               </Alert>
             )}
           </Stack>
         </form>
       </Paper>
-    </div>
+    </Box>
   );
 }
-
