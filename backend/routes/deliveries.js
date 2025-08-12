@@ -79,7 +79,15 @@ router.get("/:id", async (req, res) => {
 // POST /api/deliveries
 router.post("/", async (req, res) => {
   try {
-    const { customer, customerName, deliveredTo, items, signature, date } = req.body;
+    const {
+      customer,
+      customerName,
+      deliveredTo,
+      items,
+      signature,
+      date,
+      personalNumber, // חדש: מספר אישי מהקליינט
+    } = req.body;
 
     if (!customer || !customerName || !deliveredTo || !Array.isArray(items) || items.length === 0 || !signature) {
       return res.status(400).json({ error: "שדות חובה חסרים" });
@@ -89,11 +97,12 @@ router.post("/", async (req, res) => {
     for (const row of items) {
       if (!row?.product) return res.status(400).json({ error: "חסר מזהה מוצר בשורה" });
       const qty = Number(row.quantity);
-      if (!Number.isFinite(qty) || qty < 1) {
+      if (!Number.isFinite(qty) || qty < 1)
         return res.status(400).json({ error: "כמות חייבת להיות מספר חיובי" });
-      }
+
       const prod = await getProductById(String(row.product));
       if (!prod) return res.status(400).json({ error: `מוצר לא נמצא: ${String(row.product)}` });
+
       const stock = Number(prod.stock ?? 0);
       if (stock < qty) {
         return res.status(400).json({
@@ -106,6 +115,11 @@ router.post("/", async (req, res) => {
     for (const row of items) {
       await updateProductStock(String(row.product), -Number(row.quantity));
     }
+
+    // מי הנפיק? (דורש verifyAuth ב-server.js עבור /api/deliveries)
+    const issuedByUid = req.user?.uid || null;
+    const issuedByEmail = req.user?.email || null;
+    const issuedByName = req.user?.name || req.user?.displayName || null;
 
     // שמירה
     const cleanItems = items.map((i) => ({
@@ -120,6 +134,10 @@ router.post("/", async (req, res) => {
       items: cleanItems,
       signature: String(signature),
       date: date ? new Date(date) : new Date(),
+      personalNumber: personalNumber ? String(personalNumber) : "", // חדש
+      issuedByUid,
+      issuedByEmail,
+      issuedByName,
     };
 
     const newDelivery = await addDelivery(deliveryData);
@@ -198,10 +216,20 @@ router.post("/:id/receipt", async (req, res) => {
     rtlText(doc, "קבלה\u00A0על ניפוק מלאי");
     doc.moveDown(0.5);
 
-    // פרטי לקוח/מקבל/תאריך — רווח קשיח בין "נופק" ל"ל"
+    // פרטים כלליים
     doc.fontSize(14);
     rtlText(doc, `לקוח: ${customerName}`);
     rtlText(doc, `נופק\u00A0ל: ${delivery.deliveredTo || ""}`);
+
+    // חדש: מי ניפק + מספר אישי
+    const byStr =
+      delivery.issuedByName || delivery.issuedByEmail || delivery.issuedByUid || "";
+    if (byStr) {
+      rtlText(doc, `נופק\u00A0על\u00A0ידי: ${byStr}`);
+    }
+    if (delivery.personalNumber) {
+      rtlText(doc, `מספר\u00A0אישי: ${delivery.personalNumber}`);
+    }
 
     const d = normalizeDate(delivery.date);
     const dateText = d

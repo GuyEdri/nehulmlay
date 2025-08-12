@@ -24,6 +24,7 @@ export default function IssueStock({ onIssued }) {
   const [customers, setCustomers] = useState([]);
   const [customer, setCustomer] = useState("");
   const [deliveredTo, setDeliveredTo] = useState("");
+  const [personalNumber, setPersonalNumber] = useState(""); // חדש: מספר אישי
   const [items, setItems] = useState([{ product: "", quantity: 1 }]);
   const [signature, setSignature] = useState(null);
   const [error, setError] = useState("");
@@ -78,13 +79,16 @@ export default function IssueStock({ onIssued }) {
     setError("");
     setSuccess("");
 
-    // ולידציות בסיסיות
     if (!customer || !String(customer).trim()) {
       setError("יש לבחור לקוח");
       return;
     }
     if (!deliveredTo.trim()) {
       setError("יש להזין שם למי נופק");
+      return;
+    }
+    if (!personalNumber.trim()) {
+      setError("יש להזין מספר אישי");
       return;
     }
     if (
@@ -135,8 +139,9 @@ export default function IssueStock({ onIssued }) {
         items: cleanItems,
         signature,
         deliveredTo,
-        customer: String(customer), // מזהה לקוח
-        customerName, // שם הלקוח לשמירה בניפוק
+        customer: String(customer),
+        customerName,
+        personalNumber: personalNumber.trim(), // חדש: עובר לשרת
       };
 
       await api.post("/api/deliveries", body);
@@ -144,6 +149,7 @@ export default function IssueStock({ onIssued }) {
       setSuccess("ניפוק בוצע בהצלחה");
       setCustomer("");
       setDeliveredTo("");
+      setPersonalNumber(""); // איפוס
       setItems([{ product: "", quantity: 1 }]);
       setSignature(null);
       if (onIssued) onIssued();
@@ -213,6 +219,17 @@ export default function IssueStock({ onIssued }) {
               label="שם למי נופק"
               value={deliveredTo}
               onChange={(e) => setDeliveredTo(e.target.value)}
+              required
+              fullWidth
+              sx={{ direction: "rtl", textAlign: "right" }}
+              inputProps={{ style: { textAlign: "right" } }}
+            />
+
+            {/* חדש: מספר אישי */}
+            <TextField
+              label="מספר אישי"
+              value={personalNumber}
+              onChange={(e) => setPersonalNumber(e.target.value)}
               required
               fullWidth
               sx={{ direction: "rtl", textAlign: "right" }}

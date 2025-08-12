@@ -16,13 +16,13 @@ const __dirname = path.dirname(__filename);
 
 // ----- Middleware -----
 
-// הגדלת ה-limit בגלל חתימות base64
+// חתימות base64 וכו' יכולות להיות כבדות
 app.use(express.json({ limit: "5mb" }));
 
 // CORS: מקורות מותרים מתוך משתנה סביבה או ברירות מחדל ל־localhost/Render
 const defaultWhitelist = [
-  /^http:\/\/localhost:\d+$/, // dev
-  /\.onrender\.com$/,         // Render
+  /^http:\/\/localhost:\d+$/, // dev (כל פורט)
+  /\.onrender\.com$/,         // דומיינים של Render (פרונט)
 ];
 
 const envWhitelist = (process.env.FRONTEND_URL || "")
@@ -35,19 +35,22 @@ const whitelist = [
   ...defaultWhitelist, // רג׳אקסים
 ];
 
-app.use(
-  cors({
-    origin(origin, cb) {
-      // מאפשר גם כלים ללא Origin (curl/Postman/Render health checks)
-      if (!origin) return cb(null, true);
-      const ok = whitelist.some((rule) =>
-        typeof rule === "string" ? rule === origin : rule.test(origin)
-      );
-      return ok ? cb(null, true) : cb(new Error("Not allowed by CORS"));
-    },
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  })
-);
+const corsMiddleware = cors({
+  origin(origin, cb) {
+    // לאכוף רק כשיש Origin (curl/healthz/שרתים פנימיים בלי Origin שיאושרו)
+    if (!origin) return cb(null, true);
+    const ok = whitelist.some((rule) =>
+      typeof rule === "string" ? rule === origin : rule.test(origin)
+    );
+    return ok ? cb(null, true) : cb(new Error("Not allowed by CORS"));
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  optionsSuccessStatus: 204,
+});
+
+app.use(corsMiddleware);
+// פרה־פלייט לנתיבי API
+app.options("/api/*", corsMiddleware);
 
 // (אופציונלי) סטטי – אם תרצה לשרת פונטים/קבצים:
 app.use("/static", express.static(path.resolve(__dirname, "public")));
@@ -72,10 +75,14 @@ app.use((req, res, next) => {
   next();
 });
 
-// טיפול שגיאות בסיסי
+// טיפול שגיאות בסיסי (כולל שגיאת CORS)
 app.use((err, req, res, next) => {
+  if (err?.message === "Not allowed by CORS") {
+    // עדיף להחזיר 403 כדי שיהיה ברור שזה CORS
+    return res.status(403).json({ error: "CORS: origin not allowed" });
+  }
   console.error("Unhandled error:", err);
-  res.status(500).json({ error: err.message || "Internal Server Error" });
+  res.status(500).json({ error: err?.message || "Internal Server Error" });
 });
 
 // ----- Start -----
