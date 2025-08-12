@@ -1,7 +1,6 @@
 // frontend/src/components/ProductsList.js
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { api } from "../api";
-import UpdateStock from "./UpdateStock";
 import ProductHistory from "./ProductHistory";
 
 import {
@@ -114,7 +113,6 @@ export default function ProductsList() {
                   </Stack>
 
                   <Stack direction="row" spacing={1} alignItems="center">
-                    <UpdateStock productId={id} onUpdate={fetchProducts} />
                     <IconButton aria-label="היסטוריה" onClick={() => handleShowHistory(id)} size="small">
                       <HistoryIcon />
                     </IconButton>
@@ -145,23 +143,21 @@ export default function ProductsList() {
             <TableHead>
               <TableRow>
                 <TableCell align="right" sx={{ width: "12%" }}>מקט</TableCell>
-                <TableCell align="right" sx={{ width: "20%" }}>שם</TableCell>
-                <TableCell align="right" sx={{ width: "35%" }}>תיאור</TableCell>
+                <TableCell align="right" sx={{ width: "25%" }}>שם</TableCell>
+                <TableCell align="right" sx={{ width: "45%" }}>תיאור</TableCell>
                 <TableCell align="right" sx={{ width: "10%" }}>כמות</TableCell>
-                <TableCell align="right" sx={{ width: "18%" }}>עדכון מלאי</TableCell>
-                <TableCell align="right" sx={{ width: "5%" }}>היסטוריה</TableCell>
-                <TableCell align="right" sx={{ width: "5%" }}>מחיקה</TableCell>
+                <TableCell align="right" sx={{ width: "8%" }}>פעולות</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center">טוען...</TableCell>
+                  <TableCell colSpan={5} align="center">טוען...</TableCell>
                 </TableRow>
               )}
               {noResults && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ color: "text.secondary" }}>
+                  <TableCell colSpan={5} align="center" sx={{ color: "text.secondary" }}>
                     לא נמצאו מוצרים
                   </TableCell>
                 </TableRow>
@@ -180,23 +176,20 @@ export default function ProductsList() {
                       </TableCell>
                       <TableCell align="right"><b>{p.stock}</b></TableCell>
                       <TableCell align="right">
-                        <UpdateStock productId={id} onUpdate={fetchProducts} />
-                      </TableCell>
-                      <TableCell align="right">
-                        <Button size="small" onClick={() => handleShowHistory(id)}>
-                          {selectedProduct === id ? "הסתר" : "הצג היסטוריה"}
-                        </Button>
-                      </TableCell>
-                      <TableCell align="right">
-                        <IconButton onClick={() => handleDelete(id)} color="error">
-                          <DeleteIcon />
-                        </IconButton>
+                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                          <Button size="small" onClick={() => handleShowHistory(id)}>
+                            {selectedProduct === id ? "הסתר היסטוריה" : "הצג היסטוריה"}
+                          </Button>
+                          <IconButton onClick={() => handleDelete(id)} color="error">
+                            <DeleteIcon />
+                          </IconButton>
+                        </Stack>
                       </TableCell>
                     </TableRow>
 
                     {selectedProduct === id && (
                       <TableRow>
-                        <TableCell colSpan={7} sx={{ background: "#fafafa" }}>
+                        <TableCell colSpan={5} sx={{ background: "#fafafa" }}>
                           <ProductHistory productId={id} />
                         </TableCell>
                       </TableRow>
