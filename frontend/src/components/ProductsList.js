@@ -6,11 +6,12 @@ import ProductHistory from "./ProductHistory";
 import {
   Box, Typography, TextField, IconButton, Button, Divider,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-  Stack, useMediaQuery
+  Stack, useMediaQuery, Tooltip, InputAdornment
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import HistoryIcon from "@mui/icons-material/History";
 import InventoryIcon from "@mui/icons-material/Inventory";
+import UpdateIcon from "@mui/icons-material/PublishedWithChanges";
 import { useTheme } from "@mui/material/styles";
 
 export default function ProductsList() {
@@ -18,6 +19,10 @@ export default function ProductsList() {
   const [search, setSearch] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  // ערך שינוי לכל מוצר (יכול להיות שלילי/חיובי)
+  const [deltas, setDeltas] = useState({}); // { [productId]: number }
+  const [rowBusy, setRowBusy] = useState({}); // אינדיקציית טעינה לשורה
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm")); // <600px
@@ -59,7 +64,70 @@ export default function ProductsList() {
     }
   };
 
+  const setDelta = (productId, value) => {
+    setDeltas((prev) => ({ ...prev, [productId]: value }));
+  };
+
+  const handleAdjustStock = async (productId) => {
+    const raw = deltas[productId];
+    const delta = Number(raw);
+
+    if (!Number.isFinite(delta) || delta === 0) {
+      alert("הכנס שינוי מלאי שונה מאפס (אפשר גם שלילי להפחתה).");
+      return;
+    }
+
+    try {
+      setRowBusy((prev) => ({ ...prev, [productId]: true }));
+      // בצד השרת: בצע $inc/FieldValue.increment על stock
+      await api.post(`/api/products/${productId}/adjust-stock`, { delta });
+      setDelta(productId, 0); // איפוס הקלט אחרי הצלחה
+      await fetchProducts();  // רענון הנתונים
+    } catch (err) {
+      console.error(err);
+      alert("שגיאה בעדכון מלאי: " + (err?.response?.data?.error || err?.message));
+    } finally {
+      setRowBusy((prev) => ({ ...prev, [productId]: false }));
+    }
+  };
+
   const noResults = useMemo(() => !loading && products.length === 0, [loading, products]);
+
+  const StockAdjustControls = ({ id }) => {
+    const value = deltas[id] ?? 0;
+    const busy = !!rowBusy[id];
+
+    return (
+      <Stack direction="row" spacing={1} alignItems="center">
+        <TextField
+          size="small"
+          type="number"
+          value={value}
+          onChange={(e) => setDelta(id, Number(e.target.value))}
+          placeholder="שינוי מלאי"
+          sx={{ width: 140 }}
+          inputProps={{ style: { textAlign: "center" } }}
+          InputProps={{
+            startAdornment: <InputAdornment position="start">Δ</InputAdornment>,
+          }}
+          disabled={busy}
+        />
+        <Tooltip title="עדכן מלאי (תוספת/הפחתה)">
+          <span>
+            <Button
+              size="small"
+              variant="contained"
+              onClick={() => handleAdjustStock(id)}
+              startIcon={<UpdateIcon />}
+              disabled={busy}
+            >
+              עדכן
+            </Button>
+          </span>
+        </Tooltip>
+      </Stack>
+    );
+  };
 
   return (
     <Box sx={{ direction: "rtl", textAlign: "right", p: 2 }}>
@@ -91,6 +159,8 @@ export default function ProductsList() {
           {products.map((p) => {
             const id = pid(p);
             const open = selectedProduct === id;
+            const busy = !!rowBusy[id];
+
             return (
               <Paper key={id} elevation={2} sx={{ p: 1.5 }}>
                 <Stack direction="row" alignItems="center" spacing={1} justifyContent="space-between">
@@ -108,7 +178,7 @@ export default function ProductsList() {
                       </Typography>
                     )}
                     <Typography variant="body2">
-                      כמות במלאי: <b>{p.stock}</b>
+                      כמות במלאי: <b>{busy ? "…" : p.stock}</b>
                     </Typography>
                   </Stack>
 
@@ -127,6 +197,9 @@ export default function ProductsList() {
                   </Stack>
                 </Stack>
 
+                <Divider sx={{ my: 1 }} />
+                <StockAdjustControls id={id} />
+
                 {open && (
                   <>
                     <Divider sx={{ my: 1 }} />
@@ -142,11 +215,11 @@ export default function ProductsList() {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell align="right" sx={{ width: "12%" }}>מקט</TableCell>
-                <TableCell align="right" sx={{ width: "25%" }}>שם</TableCell>
-                <TableCell align="right" sx={{ width: "45%" }}>תיאור</TableCell>
+                <TableCell align="right" sx={{ width: "10%" }}>מקט</TableCell>
+                <TableCell align="right" sx={{ width: "20%" }}>שם</TableCell>
+                <TableCell align="right" sx={{ width: "32%" }}>תיאור</TableCell>
                 <TableCell align="right" sx={{ width: "10%" }}>כמות</TableCell>
-                <TableCell align="right" sx={{ width: "8%" }}>פעולות</TableCell>
+                <TableCell align="right" sx={{ width: "28%" }}>שינוי מלאי (Δ)</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -164,6 +237,8 @@ export default function ProductsList() {
               )}
               {products.map((p) => {
                 const id = pid(p);
+                const busy = !!rowBusy[id];
+
                 return (
                   <React.Fragment key={id}>
                     <TableRow hover>
@@ -174,15 +249,20 @@ export default function ProductsList() {
                       <TableCell align="right" sx={{ color: "text.secondary" }}>
                         {p.description}
                       </TableCell>
-                      <TableCell align="right"><b>{p.stock}</b></TableCell>
+                      <TableCell align="right"><b>{busy ? "…" : p.stock}</b></TableCell>
                       <TableCell align="right">
-                        <Stack direction="row" spacing={1} justifyContent="flex-end">
-                          <Button size="small" onClick={() => handleShowHistory(id)}>
-                            {selectedProduct === id ? "הסתר היסטוריה" : "הצג היסטוריה"}
-                          </Button>
-                          <IconButton onClick={() => handleDelete(id)} color="error">
-                            <DeleteIcon />
-                          </IconButton>
+                        <Stack direction="row" spacing={1} justifyContent="flex-end" alignItems="center">
+                          <StockAdjustControls id={id} />
+                          <Tooltip title={selectedProduct === id ? "הסתר היסטוריה" : "הצג היסטוריה"}>
+                            <Button size="small" onClick={() => handleShowHistory(id)}>
+                              {selectedProduct === id ? "הסתר היסטוריה" : "הצג היסטוריה"}
+                            </Button>
+                          </Tooltip>
+                          <Tooltip title="מחק מוצר">
+                            <IconButton onClick={() => handleDelete(id)} color="error">
+                              <DeleteIcon />
+                            </IconButton>
+                          </Tooltip>
                         </Stack>
                       </TableCell>
                     </TableRow>
