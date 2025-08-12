@@ -162,10 +162,10 @@ export default function IssueStock({ onIssued }) {
 
   return (
     <Box 
-      dir="rtl" 
+      dir="ltr" 
       sx={{ 
-        direction: "rtl",
-        textAlign: "right",
+        direction: "ltr",
+        textAlign: "left",
         fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif"
       }}
     >
@@ -188,8 +188,8 @@ export default function IssueStock({ onIssued }) {
           p: 4,
           maxWidth: 700,
           margin: "auto",
-          direction: "rtl",
-          textAlign: "right",
+          direction: "ltr",
+          textAlign: "left",
         }}
       >
         <Typography
@@ -197,20 +197,20 @@ export default function IssueStock({ onIssued }) {
           mb={3}
           fontWeight="bold"
           textAlign="center"
-          dir="rtl"
+          dir="ltr"
         >
           ניפוק מלאי ללקוח
         </Typography>
 
-        <form onSubmit={handleIssue} dir="rtl">
-          <Stack spacing={3} dir="rtl">
-            <FormControl fullWidth required dir="rtl">
+        <form onSubmit={handleIssue} dir="ltr">
+          <Stack spacing={3} dir="ltr">
+            <FormControl fullWidth required dir="ltr">
               <InputLabel
                 id="customer-select-label"
                 sx={{ 
-                  right: 14,
-                  left: "auto",
-                  transformOrigin: "right"
+                  left: 14,
+                  right: "auto",
+                  transformOrigin: "left"
                 }}
               >
                 בחר לקוח
@@ -224,25 +224,25 @@ export default function IssueStock({ onIssued }) {
                 onChange={(e) => setCustomer(e.target.value)}
                 sx={{ 
                   "& .MuiSelect-select": {
-                    textAlign: "right",
-                    direction: "rtl"
+                    textAlign: "left",
+                    direction: "ltr"
                   },
                   "& .MuiOutlinedInput-notchedOutline": {
-                    textAlign: "right"
+                    textAlign: "left"
                   }
                 }}
                 MenuProps={{
                   anchorOrigin: {
                     vertical: "bottom",
-                    horizontal: "right",
+                    horizontal: "left",
                   },
                   transformOrigin: {
                     vertical: "top",
-                    horizontal: "right",
+                    horizontal: "left",
                   },
                   PaperProps: {
                     sx: {
-                      direction: "rtl"
+                      direction: "ltr"
                     }
                   }
                 }}
@@ -252,9 +252,9 @@ export default function IssueStock({ onIssued }) {
                     key={c._id || c.id}
                     value={String(c._id || c.id)}
                     sx={{ 
-                      direction: "rtl", 
+                      direction: "ltr", 
                       justifyContent: "flex-start",
-                      textAlign: "right"
+                      textAlign: "left"
                     }}
                   >
                     {c.name}
@@ -269,16 +269,16 @@ export default function IssueStock({ onIssued }) {
               onChange={(e) => setDeliveredTo(e.target.value)}
               required
               fullWidth
-              dir="rtl"
+              dir="ltr"
               sx={{ 
                 "& .MuiInputBase-input": {
-                  textAlign: "right",
-                  direction: "rtl"
+                  textAlign: "left",
+                  direction: "ltr"
                 },
                 "& .MuiInputLabel-root": {
-                  right: 14,
-                  left: "auto",
-                  transformOrigin: "right"
+                  left: 14,
+                  right: "auto",
+                  transformOrigin: "left"
                 }
               }}
             />
@@ -289,16 +289,16 @@ export default function IssueStock({ onIssued }) {
               onChange={(e) => setPersonalNumber(e.target.value)}
               required
               fullWidth
-              dir="rtl"
+              dir="ltr"
               sx={{ 
                 "& .MuiInputBase-input": {
-                  textAlign: "right",
-                  direction: "rtl"
+                  textAlign: "left",
+                  direction: "ltr"
                 },
                 "& .MuiInputLabel-root": {
-                  right: 14,
-                  left: "auto",
-                  transformOrigin: "right"
+                  left: 14,
+                  right: "auto",
+                  transformOrigin: "left"
                 }
               }}
             />
@@ -306,18 +306,18 @@ export default function IssueStock({ onIssued }) {
             {items.map((item, idx) => (
               <Stack
                 key={idx}
-                direction="row-reverse"
+                direction="row"
                 spacing={2}
                 alignItems="center"
-                sx={{ direction: "rtl" }}
+                sx={{ direction: "ltr" }}
               >
-                <FormControl sx={{ flex: 1 }} required dir="rtl">
+                <FormControl sx={{ flex: 1 }} required dir="ltr">
                   <InputLabel
                     id={`product-select-label-${idx}`}
                     sx={{ 
-                      right: 14,
-                      left: "auto",
-                      transformOrigin: "right"
+                      left: 14,
+                      right: "auto",
+                      transformOrigin: "left"
                     }}
                   >
                     בחר מוצר
@@ -333,22 +333,22 @@ export default function IssueStock({ onIssued }) {
                     }
                     sx={{ 
                       "& .MuiSelect-select": {
-                        textAlign: "right",
-                        direction: "rtl"
+                        textAlign: "left",
+                        direction: "ltr"
                       }
                     }}
                     MenuProps={{
                       anchorOrigin: {
                         vertical: "bottom",
-                        horizontal: "right",
+                        horizontal: "left",
                       },
                       transformOrigin: {
                         vertical: "top",
-                        horizontal: "right",
+                        horizontal: "left",
                       },
                       PaperProps: {
                         sx: {
-                          direction: "rtl"
+                          direction: "ltr"
                         }
                       }
                     }}
@@ -358,9 +358,9 @@ export default function IssueStock({ onIssued }) {
                         key={p._id || p.id}
                         value={String(p._id || p.id)}
                         sx={{ 
-                          direction: "rtl", 
+                          direction: "ltr", 
                           justifyContent: "flex-start",
-                          textAlign: "right"
+                          textAlign: "left"
                         }}
                       >
                         {p.sku ? `[${p.sku}] ` : ""}{p.name} (במלאי: {p.stock})
@@ -378,16 +378,16 @@ export default function IssueStock({ onIssued }) {
                     handleItemChange(idx, "quantity", e.target.value)
                   }
                   required
-                  dir="rtl"
+                  dir="ltr"
                   sx={{ 
                     width: 120,
                     "& .MuiInputBase-input": {
                       textAlign: "center"
                     },
                     "& .MuiInputLabel-root": {
-                      right: 14,
-                      left: "auto",
-                      transformOrigin: "right"
+                      left: 14,
+                      right: "auto",
+                      transformOrigin: "left"
                     }
                   }}
                 />
@@ -396,7 +396,7 @@ export default function IssueStock({ onIssued }) {
                   <IconButton 
                     color="error" 
                     onClick={() => handleRemoveItem(idx)}
-                    sx={{ mr: 1 }}
+                    sx={{ ml: 1 }}
                   >
                     <DeleteIcon />
                   </IconButton>
@@ -415,7 +415,7 @@ export default function IssueStock({ onIssued }) {
               הוסף מוצר נוסף
             </Button>
 
-            <Box sx={{ direction: "rtl", textAlign: "right" }}>
+            <Box sx={{ direction: "ltr", textAlign: "left" }}>
               <Typography mb={1} fontWeight="bold">
                 חתימה דיגיטלית (חובה):
               </Typography>
@@ -443,12 +443,12 @@ export default function IssueStock({ onIssued }) {
             </Button>
 
             {error && (
-              <Alert severity="error" dir="rtl" sx={{ textAlign: "right" }}>
+              <Alert severity="error" dir="ltr" sx={{ textAlign: "left" }}>
                 {error}
               </Alert>
             )}
             {success && (
-              <Alert severity="success" dir="rtl" sx={{ textAlign: "right" }}>
+              <Alert severity="success" dir="ltr" sx={{ textAlign: "left" }}>
                 {success}
               </Alert>
             )}
