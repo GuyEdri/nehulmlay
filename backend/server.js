@@ -15,14 +15,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ----- Middleware -----
-
-// חתימות base64 וכו' יכולות להיות כבדות
 app.use(express.json({ limit: "5mb" }));
 
-// CORS: מקורות מותרים מתוך משתנה סביבה או ברירות מחדל ל־localhost/Render
+// CORS whitelist
 const defaultWhitelist = [
   /^http:\/\/localhost:\d+$/, // dev (כל פורט)
-  /\.onrender\.com$/,         // דומיינים של Render (פרונט)
+  /\.onrender\.com$/,         // Render
 ];
 
 const envWhitelist = (process.env.FRONTEND_URL || "")
@@ -30,14 +28,10 @@ const envWhitelist = (process.env.FRONTEND_URL || "")
   .map((s) => s.trim())
   .filter(Boolean);
 
-const whitelist = [
-  ...envWhitelist,     // מחרוזות מלאות מ-FRONTEND_URL (אפשר כמה, מופרדים בפסיק)
-  ...defaultWhitelist, // רג׳אקסים
-];
+const whitelist = [...envWhitelist, ...defaultWhitelist];
 
 const corsMiddleware = cors({
   origin(origin, cb) {
-    // לאכוף רק כשיש Origin (curl/healthz/שרתים פנימיים בלי Origin שיאושרו)
     if (!origin) return cb(null, true);
     const ok = whitelist.some((rule) =>
       typeof rule === "string" ? rule === origin : rule.test(origin)
@@ -49,10 +43,8 @@ const corsMiddleware = cors({
 });
 
 app.use(corsMiddleware);
-// פרה־פלייט לנתיבי API
-app.options("/api/*", corsMiddleware);
 
-// (אופציונלי) סטטי – אם תרצה לשרת פונטים/קבצים:
+// (אופציונלי) סטטי – אם תרצה לשרת פונטים/קבצים
 app.use("/static", express.static(path.resolve(__dirname, "public")));
 
 // ----- Public routes (ללא אימות) -----
@@ -67,7 +59,7 @@ app.use("/api/customers", customersRouter);
 app.use("/api/products", productsRouter);
 app.use("/api/deliveries", deliveriesRouter);
 
-// 404 גנרי ל-API מוגן
+// 404 לנתיבי API
 app.use((req, res, next) => {
   if (req.path.startsWith("/api/")) {
     return res.status(404).json({ error: "Not Found" });
@@ -75,10 +67,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// טיפול שגיאות בסיסי (כולל שגיאת CORS)
+// Error handler (כולל CORS)
 app.use((err, req, res, next) => {
   if (err?.message === "Not allowed by CORS") {
-    // עדיף להחזיר 403 כדי שיהיה ברור שזה CORS
     return res.status(403).json({ error: "CORS: origin not allowed" });
   }
   console.error("Unhandled error:", err);
