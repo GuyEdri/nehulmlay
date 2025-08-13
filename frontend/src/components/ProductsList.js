@@ -21,7 +21,7 @@ export default function ProductsList() {
   const [loading, setLoading] = useState(false);
 
   // ערך שינוי לכל מוצר (יכול להיות שלילי/חיובי)
-  const [deltas, setDeltas] = useState({}); // { [productId]: number }
+  const [deltas, setDeltas] = useState({}); // { [productId]: string }
   const [rowBusy, setRowBusy] = useState({}); // אינדיקציית טעינה לשורה
 
   const theme = useTheme();
@@ -70,19 +70,19 @@ export default function ProductsList() {
 
   const handleAdjustStock = async (productId) => {
     const raw = deltas[productId];
-    const delta = Number(raw);
+    const deltaNum = Number(raw);
 
-    if (!Number.isFinite(delta) || delta === 0) {
-      alert("הכנס שינוי מלאי שונה מאפס (אפשר גם שלילי להפחתה).");
+    if (!raw || !Number.isFinite(deltaNum) || !Number.isInteger(deltaNum) || deltaNum === 0) {
+      alert("הכנס שינוי מלאי שונה מאפס (מספר שלם, אפשר שלילי להפחתה).");
       return;
     }
 
     try {
       setRowBusy((prev) => ({ ...prev, [productId]: true }));
-      // בצד השרת: בצע $inc/FieldValue.increment על stock
-      await api.post(`/api/products/${productId}/adjust-stock`, { delta });
-      setDelta(productId, 0); // איפוס הקלט אחרי הצלחה
-      await fetchProducts();  // רענון הנתונים
+      // שימוש בראוט הקיים: PUT /api/products/:id/stock  עם { diff }
+      await api.put(`/api/products/${productId}/stock`, { diff: deltaNum });
+      setDelta(productId, "");   // איפוס השדה אחרי הצלחה
+      await fetchProducts();     // רענון הנתונים
     } catch (err) {
       console.error(err);
       alert("שגיאה בעדכון מלאי: " + (err?.response?.data?.error || err?.message));
@@ -94,7 +94,7 @@ export default function ProductsList() {
   const noResults = useMemo(() => !loading && products.length === 0, [loading, products]);
 
   const StockAdjustControls = ({ id }) => {
-    const value = deltas[id] ?? 0;
+    const value = deltas[id] ?? "";
     const busy = !!rowBusy[id];
 
     return (
@@ -103,13 +103,11 @@ export default function ProductsList() {
           size="small"
           type="number"
           value={value}
-          onChange={(e) => setDelta(id, Number(e.target.value))}
-          placeholder="שינוי מלאי"
-          sx={{ width: 140 }}
+          onChange={(e) => setDelta(id, e.target.value)}
+          placeholder="שינוי מלאי (למשל 5 או -3)"
+          sx={{ width: 180 }}
           inputProps={{ style: { textAlign: "center" } }}
-          InputProps={{
-            startAdornment: <InputAdornment position="start">Δ</InputAdornment>,
-          }}
+          InputProps={{ startAdornment: <InputAdornment position="start">Δ</InputAdornment> }}
           disabled={busy}
         />
         <Tooltip title="עדכן מלאי (תוספת/הפחתה)">
