@@ -4,6 +4,7 @@ import ProductsList from "./components/ProductsList";
 import AddProduct from "./components/AddProduct";
 import IssueStock from "./components/IssueStock";
 import DeliveriesList from "./components/DeliveriesList";
+import ProductsByContainer from "./components/ProductsByContainer.jsx";
 
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import Login from "./components/Login";
