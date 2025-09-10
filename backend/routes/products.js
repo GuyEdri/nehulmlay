@@ -8,44 +8,16 @@ import {
   updateProduct,
   deleteProduct,
   updateProductStock,
-  // חדשים:
-  getProductsGroupedByContainer,
-  getProductsByContainer,
 } from "../firestoreService.js";
 
 const router = express.Router();
 
-// GET - כל המוצרים / חיפוש / קיבוץ לפי מכולה / פילטר לפי מכולה
+// GET - כל המוצרים, אפשרות חיפוש בשם/מקט
 router.get("/", async (req, res) => {
   try {
-    const { search = "", groupBy = "", container = "" } = req.query;
-
-    // 1) קיבוץ לפי מכולה
-    if (String(groupBy).toLowerCase() === "container") {
-      const grouped = await getProductsGroupedByContainer();
-      return res.json({ groupedBy: "container", groups: grouped });
-    }
-
-    // 2) פילטר לפי מכולה ספציפית (נוח ל־UI עם dropdown)
-    if (container) {
-      const items = await getProductsByContainer(container);
-      // אפשר עדיין ליישם חיפוש מעל התוצאה המסוננת
-      const term = String(search).trim();
-      let filtered = items;
-      if (term) {
-        const up = term.toUpperCase();
-        const low = term.toLowerCase();
-        filtered = items.filter((p) => {
-          const name = String(p.name || "");
-          const sku = String(p.sku || "");
-          return name.toLowerCase().includes(low) || sku.toUpperCase().includes(up);
-        });
-      }
-      return res.json(filtered);
-    }
-
-    // 3) ברירת מחדל: כל המוצרים עם חיפוש אופציונלי בשם/מקט
+    const { search = "" } = req.query;
     let products = await getAllProducts();
+
     const term = String(search).trim();
     if (term) {
       const up = term.toUpperCase();
@@ -59,7 +31,6 @@ router.get("/", async (req, res) => {
 
     res.json(products);
   } catch (err) {
-    console.error("GET /api/products error:", err);
     res.status(500).json({ error: err.message });
   }
 });

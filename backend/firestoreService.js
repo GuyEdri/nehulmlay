@@ -1,28 +1,6 @@
 // firestoreService.js — Admin SDK version
 import { db } from "./firebaseAdmin.js";
 
-// ================== עזר: חילוץ מכולה מהתיאור ==================
-function extractContainer(description = "") {
-  if (!description || typeof description !== "string") return "ללא מכולה";
-  const text = description.trim();
-
-  const patterns = [
-    // עברית
-    /מכולה[:\-\s]*([A-Za-z0-9א-ת]+)\b/i,
-    /קונטיינר[:\-\s]*([A-Za-z0-9א-ת]+)\b/i,
-    /\[(?:מכולה|קונטיינר)\s*:\s*([A-Za-z0-9א-ת]+)\]/i,
-    // אנגלית
-    /container[:\-\s]*([A-Za-z0-9\-]+)\b/i,
-    /\[(?:container|cnt)\s*:\s*([A-Za-z0-9\-]+)\]/i,
-  ];
-
-  for (const re of patterns) {
-    const m = text.match(re);
-    if (m && m[1]) return String(m[1]).toUpperCase();
-  }
-  return "ללא מכולה";
-}
-
 // ============ PRODUCTS ============
 const productsCol = db.collection("products");
 
@@ -88,51 +66,6 @@ export async function updateProductStock(id, diff) {
 
 export async function deleteProduct(id) {
   await productsCol.doc(id).delete();
-}
-
-/** חדש: החזרת מוצרים כשהם מקובצים לפי מכולה.
- *  אם יש שדה `container` במסמך—נשתמש בו; אחרת נחלץ מתוך description.
- *  מחזיר אובייקט: { [containerName]: Product[] }
- */
-export async function getProductsGroupedByContainer() {
-  const snapshot = await productsCol.get();
-  const groups = {};
-
-  snapshot.forEach((doc) => {
-    const data = doc.data() || {};
-    const desc = data.description || "";
-    const container =
-      (data.container && String(data.container).trim()) || extractContainer(desc);
-
-    if (!groups[container]) groups[container] = [];
-    groups[container].push({ id: doc.id, _id: doc.id, ...data, container });
-  });
-
-  // מיון פנימי לפי שם (אם יש)
-  Object.keys(groups).forEach((k) => {
-    groups[k].sort((a, b) =>
-      String(a.name || "").localeCompare(String(b.name || ""), "he")
-    );
-  });
-
-  return groups;
-}
-
-/** אופציונלי: מוצרים של מכולה ספציפית (עוזר ל־API / פילטרים). */
-export async function getProductsByContainer(containerRaw) {
-  const container = String(containerRaw || "").trim().toUpperCase();
-  if (!container) return [];
-
-  // אם יש לך שדה container מאונדקס בפיירסטור:
-  //   return (await productsCol.where("container", "==", container).get()).docs.map(...)
-  // עד אז—נסנן בזיכרון:
-  const all = await getAllProducts();
-  return all
-    .map((p) => ({
-      ...p,
-      container: p.container || extractContainer(p.description || ""),
-    }))
-    .filter((p) => p.container.toUpperCase() === container);
 }
 
 // ============ CUSTOMERS ============
