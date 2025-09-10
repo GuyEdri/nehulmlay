@@ -1,5 +1,6 @@
+// frontend/src/components/ProductsByContainer.jsx (מעודכן לשימוש ב-api עם Authorization)
 import React, { useEffect, useMemo, useState } from "react";
-import axios from "axios";
+import { api } from "../api";
 
 // אפשר להחליף ל-MUI/Antd אם אתה כבר משתמש.
 // כאן נלך על HTML פשוט ונקי.
@@ -14,7 +15,7 @@ export default function ProductsByContainer() {
     (async () => {
       try {
         setLoading(true);
-        const res = await axios.get("/api/products?groupBy=container");
+        const res = await api.get("/api/products", { params: { groupBy: "container" } });
         if (!isMounted) return;
         setGroups(res.data?.groups || {});
       } catch (e) {

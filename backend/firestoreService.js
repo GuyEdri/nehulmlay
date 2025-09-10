@@ -1,24 +1,31 @@
-// firestoreService.js — Admin SDK version
+// backend/firestoreService.js — Admin SDK version (מעודכן)
 import { db } from "./firebaseAdmin.js";
 
-// ================== עזר: חילוץ מכולה מהתיאור ==================
+// ================== עזר: נירמול וחילוץ מכולה ==================
+const normalizeContainer = (s) =>
+  String(s || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[^\w\u0590-\u05FF\-_/]/g, "")
+    .toUpperCase();
+
 function extractContainer(description = "") {
   if (!description || typeof description !== "string") return "ללא מכולה";
   const text = description.trim();
 
   const patterns = [
     // עברית
-    /מכולה[:\-\s]*([A-Za-z0-9א-ת]+)\b/i,
-    /קונטיינר[:\-\s]*([A-Za-z0-9א-ת]+)\b/i,
-    /\[(?:מכולה|קונטיינר)\s*:\s*([A-Za-z0-9א-ת]+)\]/i,
+    /מכולה[:\-\s]*([A-Za-z0-9א-ת/_-]+)\b/i,
+    /קונטיינר[:\-\s]*([A-Za-z0-9א-ת/_-]+)\b/i,
+    /\[(?:מכולה|קונטיינר)\s*:\s*([A-Za-z0-9א-ת/_-]+)\]/i,
     // אנגלית
-    /container[:\-\s]*([A-Za-z0-9\-]+)\b/i,
-    /\[(?:container|cnt)\s*:\s*([A-Za-z0-9\-]+)\]/i,
+    /container[:\-\s]*([A-Za-z0-9/_-]+)\b/i,
+    /\[(?:container|cnt)\s*:\s*([A-Za-z0-9/_-]+)\]/i,
   ];
 
   for (const re of patterns) {
     const m = text.match(re);
-    if (m && m[1]) return String(m[1]).toUpperCase();
+    if (m && m[1]) return normalizeContainer(m[1]);
   }
   return "ללא מכולה";
 }
@@ -132,7 +139,7 @@ export async function getProductsByContainer(containerRaw) {
       ...p,
       container: p.container || extractContainer(p.description || ""),
     }))
-    .filter((p) => p.container.toUpperCase() === container);
+    .filter((p) => String(p.container || "").toUpperCase() === container);
 }
 
 // ============ CUSTOMERS ============
@@ -169,8 +176,26 @@ export async function deleteCustomer(id) {
 // ============ DELIVERIES ============
 const deliveriesCol = db.collection("deliveries");
 
-export async function getAllDeliveries() {
-  // מחזיר את כל הניפוקים; סינון לפי מוצר בצד לקוח/ראוטר
+/**
+ * תמיכה בסינון אופציונלי לפי productId:
+ * אם נשלח productId נחזיר רק ניפוקים שמכילים אותו (סינון בצד השרת).
+ * אחרת – נחזיר את כל הניפוקים.
+ */
+export async function getAllDeliveries(productId = null) {
+  if (productId) {
+    const pid = String(productId);
+    const snap = await deliveriesCol.get();
+    const list = [];
+    snap.forEach((d) => {
+      const data = d.data() || {};
+      const items = Array.isArray(data.items) ? data.items : [];
+      if (items.some((i) => String(i.product) === pid)) {
+        list.push({ id: d.id, _id: d.id, ...data });
+      }
+    });
+    return list;
+  }
+
   const snapshot = await deliveriesCol.get();
   return snapshot.docs.map((d) => ({ id: d.id, _id: d.id, ...d.data() }));
 }
@@ -183,7 +208,7 @@ export async function getDeliveryById(id) {
 }
 
 export async function addDelivery(data) {
-  // data = { customer, customerName?, deliveredTo, items, signature, date? }
+  // data = { customer, customerName?, deliveredTo, items, signature, date?, personalNumber?, issuedBy*? }
   const payload = { ...data };
   const docRef = await deliveriesCol.add(payload);
   return { id: docRef.id, _id: docRef.id, ...payload };

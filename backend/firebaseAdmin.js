@@ -3,21 +3,25 @@ import 'dotenv/config';
 import admin from 'firebase-admin';
 
 // טען את המפתח מקודד ב־Base64 מתוך משתנה סביבה
-if (!process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
+const saB64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+if (!saB64) {
   throw new Error('Missing FIREBASE_SERVICE_ACCOUNT_BASE64 environment variable');
 }
 
 const serviceAccount = JSON.parse(
-  Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString()
+  Buffer.from(saB64, 'base64').toString('utf8')
 );
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
+// מניעת אתחול כפול (נחוץ עם nodemon וכו')
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    // חשוב כדי למנוע "Unable to detect a Project Id"
+    projectId: serviceAccount.project_id,
+  });
+}
 
 // ייצוא שירותי Firebase Admin
-const adminAuth = admin.auth();
-const db = admin.firestore();
-
-export { adminAuth, db };
+export const adminAuth = admin.auth();
+export const db = admin.firestore();
 
