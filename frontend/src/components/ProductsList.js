@@ -16,7 +16,8 @@ import { useTheme } from "@mui/material/styles";
 
 export default function ProductsList() {
   const [products, setProducts] = useState([]);
-  const [warehouses, setWarehouses] = useState([]); // רשימת מחסנים
+  const [warehouses, setWarehouses] = useState([]);       // למחסנים
+  const [selectedWarehouse, setSelectedWarehouse] = useState(""); // ""=הכול
   const [search, setSearch] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -26,29 +27,11 @@ export default function ProductsList() {
   const [rowBusy, setRowBusy] = useState({}); // אינדיקציית טעינה לשורה
 
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm")); // <600px
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const pid = (p) => String(p._id || p.id);
 
-  // --- טעינת מוצרים (עם חיפוש) ---
-  const fetchProducts = useCallback(async () => {
-    try {
-      setLoading(true);
-      const res = await api.get("/api/products", { params: { search } });
-      setProducts(res.data || []);
-    } catch (err) {
-      console.error(err);
-      setProducts([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [search]);
-
-  useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
-
-  // --- טעינת מחסנים פעם אחת ---
+  // טען מחסנים פעם אחת
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -65,7 +48,7 @@ export default function ProductsList() {
     return () => { mounted = false; };
   }, []);
 
-  // מפה ID→שם מחסן
+  // מפה ID→שם
   const whMap = useMemo(() => {
     const m = new Map();
     (warehouses || []).forEach(w => {
@@ -78,8 +61,29 @@ export default function ProductsList() {
   const getWhName = (wid) => {
     if (!wid) return "ללא שיוך";
     const key = String(wid);
-    return whMap.get(key) || key; // fallback ל-id אם לא נמצא שם
+    return whMap.get(key) || key;
   };
+
+  // --- טעינת מוצרים עם סינון-שרת לפי מחסן + חיפוש ---
+  const fetchProducts = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params = {};
+      if (selectedWarehouse) params.warehouse = selectedWarehouse; // סינון שרת
+      if (search) params.search = search;                           // חיפוש שרת
+      const res = await api.get("/api/products", { params });
+      setProducts(res.data || []);
+    } catch (err) {
+      console.error(err);
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedWarehouse, search]);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
 
   const handleShowHistory = (productId) => {
     setSelectedProduct(selectedProduct === productId ? null : productId);
@@ -125,12 +129,11 @@ export default function ProductsList() {
     }
   };
 
-  // --- שינוי שיוך מחסן למוצר קיים ---
+  // שינוי שיוך מחסן למוצר (עדכון)
   const handleChangeWarehouse = async (productId, newWarehouseId) => {
     try {
       setRowBusy((prev) => ({ ...prev, [productId]: true }));
-      // אם בוחרים "ללא שיוך" – שלח מחרוזת ריקה
-      const patch = { warehouseId: newWarehouseId ? String(newWarehouseId) : "" };
+      const patch = { warehouseId: newWarehouseId ? String(newWarehouseId) : "" }; // ""=ללא שיוך
       await api.put(`/api/products/${productId}`, patch);
       await fetchProducts();
     } catch (err) {
@@ -177,7 +180,6 @@ export default function ProductsList() {
     );
   };
 
-  // קומפוננטת בחירת מחסן לכל שורה
   const WarehouseSelectCell = ({ value, onChange, disabled }) => {
     return (
       <FormControl size="small" sx={{ minWidth: 160 }}>
@@ -195,6 +197,7 @@ export default function ProductsList() {
 
   return (
     <Box sx={{ direction: "rtl", textAlign: "right", p: 2 }}>
+      {/* פס עליון: כותרת, חיפוש, מסנן מחסן */}
       <Stack
         direction={{ xs: "column", sm: "row" }}
         spacing={2}
@@ -204,6 +207,24 @@ export default function ProductsList() {
         <Typography variant="h5" fontWeight="bold" sx={{ flex: 1 }}>
           רשימת מוצרים
         </Typography>
+
+        <FormControl size="small" sx={{ minWidth: 180 }}>
+          <Select
+            value={selectedWarehouse}
+            onChange={(e) => setSelectedWarehouse(e.target.value)}
+            displayEmpty
+          >
+            <MenuItem value="">
+              <em>כל המחסנים</em>
+            </MenuItem>
+            {warehouses.map(w => (
+              <MenuItem key={w._id || w.id} value={String(w._id || w.id)}>
+                {w.name || "(ללא שם)"}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
         <TextField
           size="small"
           placeholder="חפש מוצר בשם או במקט..."
@@ -214,7 +235,7 @@ export default function ProductsList() {
         />
       </Stack>
 
-      {/* מובייל: כרטיסים */}
+      {/* מובייל */}
       {isMobile ? (
         <Stack spacing={1}>
           {loading && <Typography>טוען...</Typography>}
@@ -245,7 +266,6 @@ export default function ProductsList() {
                       כמות במלאי: <b>{busy ? "…" : p.stock}</b>
                     </Typography>
 
-                    {/* הצגת שם מחסן + שינוי מחסן במובייל */}
                     <Typography variant="body2" sx={{ mt: 0.5 }}>
                       מחסן: <b>{getWhName(p.warehouseId)}</b>
                     </Typography>
@@ -285,7 +305,7 @@ export default function ProductsList() {
           })}
         </Stack>
       ) : (
-        // דסקטופ: טבלה
+        // דסקטופ
         <TableContainer component={Paper} elevation={2}>
           <Table>
             <TableHead>
@@ -327,7 +347,6 @@ export default function ProductsList() {
                       </TableCell>
                       <TableCell align="right"><b>{busy ? "…" : p.stock}</b></TableCell>
 
-                      {/* מחסן: שם + בורר להחלפה */}
                       <TableCell align="right">
                         <Stack direction="row" spacing={1} alignItems="center" justifyContent="flex-end">
                           <Typography variant="body2">{getWhName(p.warehouseId)}</Typography>
