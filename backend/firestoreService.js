@@ -43,10 +43,10 @@ export async function getWarehouseByName(nameRaw) {
   return { id: d.id, _id: d.id, ...d.data() };
 }
 
-/* עזר: הפיכת שיוך מחסן ל-id+name קנוניים (כולל "" כערך ברירת מחדל) */
+/** הפיכת שיוך מחסן ל־(id,name) קנוניים. אם לא נמסר – שניהם "" */
 async function resolveWarehousePair({ warehouseId, warehouseName }) {
-  let wid = String(warehouseId || "").trim();
-  let wname = String(warehouseName || "").trim();
+  const wid = String(warehouseId || "").trim();
+  const wname = String(warehouseName || "").trim();
 
   if (wid) {
     const wh = await getWarehouseById(wid);
@@ -57,7 +57,6 @@ async function resolveWarehousePair({ warehouseId, warehouseName }) {
     if (!wh) throw new Error("warehouseName לא קיים");
     return { warehouseId: wh.id, warehouseName: String(wh.name || "") };
   }
-  // ללא שיוך
   return { warehouseId: "", warehouseName: "" };
 }
 
@@ -99,12 +98,14 @@ export async function getAllProducts() {
 
 export async function getProductsByWarehouse(warehouseIdRaw) {
   const wid = String(warehouseIdRaw || "").trim();
+  if (!wid) return [];
   const snap = await productsCol.where("warehouseId", "==", wid).get();
   return snap.docs.map((d) => ({ id: d.id, _id: d.id, ...d.data() }));
 }
 
 export async function getProductsByWarehouseName(warehouseNameRaw) {
   const wname = String(warehouseNameRaw || "").trim();
+  if (!wname) return [];
   const snap = await productsCol.where("warehouseName", "==", wname).get();
   return snap.docs.map((d) => ({ id: d.id, _id: d.id, ...d.data() }));
 }
@@ -125,7 +126,7 @@ export async function getProductBySku(rawSku) {
   return { id: doc.id, _id: doc.id, ...doc.data() };
 }
 
-/* עזר: מציאת מוצר לפי (SKU, warehouseId) */
+/** מציאת מוצר לפי (SKU, warehouseId) */
 async function getProductBySkuAndWarehouse(sku, warehouseId) {
   const snap = await productsCol
     .where("sku", "==", sku)
@@ -137,29 +138,31 @@ async function getProductBySkuAndWarehouse(sku, warehouseId) {
   return { id: d.id, _id: d.id, ...d.data() };
 }
 
-/* === UPSERT לפי (SKU, מחסן) ===
-   אם קיים מוצר עם אותו SKU באותו מחסן → עדכון מלאי (ועדכון שם/תיאור אם נמסרו)
-   אחרת → יצירת מסמך חדש
-*/
+/** UPSERT לפי (SKU, מחסן):
+ * אם קיים מוצר עם אותו SKU באותו מחסן → עדכון מלאי + עדכון שם/תיאור (אם נמסרו)
+ * אחרת → יצירת מסמך חדש.
+ */
 export async function addProduct(data) {
   const name = String(data?.name || "").trim();
   const sku = String(data?.sku || "").trim().toUpperCase();
   const stockToAdd = Number(data?.stock ?? 0);
+
   if (!name) throw new Error("שם מוצר חייב להיות מחרוזת תקינה");
   if (!sku) throw new Error("מקט (SKU) חובה");
-  if (!Number.isFinite(stockToAdd) || stockToAdd < 0) throw new Error("מלאי חייב להיות מספר 0 ומעלה");
+  if (!Number.isFinite(stockToAdd) || stockToAdd < 0) {
+    throw new Error("מלאי חייב להיות מספר 0 ומעלה");
+  }
 
-  // קבע שיוך מחסן (id + name) – תמיד שדות קיימים (כולל "" כשאין שיוך)
-  const { warehouseId, warehouseName } = await resolveWarehousePair({
+  const resolved = await resolveWarehousePair({
     warehouseId: data?.warehouseId,
     warehouseName: data?.warehouseName,
   });
+  const warehouseId = resolved.warehouseId;
+  const warehouseName = resolved.warehouseName;
 
-  // בדיקת קיום לפי (sku, warehouseId)
   const existing = await getProductBySkuAndWarehouse(sku, warehouseId);
 
   if (existing) {
-    // עדכון מלאי יחסי + עדכון שם/תיאור אם הגיעו
     const docRef = productsCol.doc(existing.id);
     const patch = {
       stock: Number(existing.stock || 0) + stockToAdd,
@@ -168,22 +171,20 @@ export async function addProduct(data) {
     if (data?.description !== undefined) {
       patch.description = String(data.description || "").trim();
     }
-    // אם שלחו שם מחסן חדש במפורש, נעדכן לתצוגה (לא משנים מחסן במסמך קיים)
-    if (warehouseName) patch.warehouseName = warehouseName;
+    if (warehouseName) patch.warehouseName = warehouseName; // עדכון תצוגה
 
     await docRef.update(patch);
     const updated = await docRef.get();
     return { id: updated.id, _id: updated.id, ...updated.data(), _upsert: true };
   }
 
-  // יצירה חדשה (אין מוצר כזה במחסן הזה)
   const payload = {
     name,
     sku,
     description: String(data?.description || "").trim(),
     stock: stockToAdd,
-    warehouseId,   // שדה תמידי
-    warehouseName, // שדה תמידי
+    warehouseId,
+    warehouseName,
     createdAt: new Date(),
   };
   const docRef = await productsCol.add(payload);
@@ -203,8 +204,8 @@ export async function updateProduct(id, updates) {
     if (!newSku) throw new Error("מקט (SKU) לא תקין");
     // ייחודיות בתוך אותו מחסן:
     const current = await getProductById(id);
-    const dup = await getProductBySkuAndWarehouse(newSku, String(current.warehouseId || ""));
-    if (dup && String(dup.id) !== String(id)) {
+    const candidate = await getProductBySkuAndWarehouse(newSku, String(current.warehouseId || ""));
+    if (candidate && String(candidate.id) !== String(id)) {
       throw new Error("מקט כבר קיים במחסן הזה");
     }
     patch.sku = newSku;
@@ -219,20 +220,24 @@ export async function updateProduct(id, updates) {
   // שינוי שיוך מחסן (מאפשרים לעדכן; נשמרים שני השדות)
   if (patch.warehouseId !== undefined || patch.warehouseName !== undefined) {
     const current = await getProductById(id);
-    const { warehouseId, warehouseName } = await resolveWarehousePair({
+    const resolved = await resolveWarehousePair({
       warehouseId: patch.warehouseId ?? current.warehouseId,
       warehouseName: patch.warehouseName ?? current.warehouseName,
     });
+    const newWid = resolved.warehouseId;
+    const newWname = resolved.warehouseName;
 
-    // אם הועבר SKU יחד עם שינוי מחסן, נאמת ייחודיות בצמד החדש
-    const newSku = patch.sku ?? current.sku;
-    const dup = await getProductBySkuAndWarehouse(String(newSku).toUpperCase(), warehouseId);
+    // אם שינו גם SKU, נוודא שאין כפילות בצמד החדש
+    const newSkuCandidate =
+      patch.sku != null ? String(patch.sku) : String(current.sku || "");
+    const newSku = newSkuCandidate.trim().toUpperCase();
+    const dup = await getProductBySkuAndWarehouse(newSku, newWid);
     if (dup && String(dup.id) !== String(id)) {
       throw new Error("מקט כבר קיים במחסן היעד");
     }
 
-    patch.warehouseId = warehouseId;
-    patch.warehouseName = warehouseName;
+    patch.warehouseId = newWid;
+    patch.warehouseName = newWname;
   }
 
   const docRef = productsCol.doc(String(id));

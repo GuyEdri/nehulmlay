@@ -20,38 +20,61 @@ import {
 import DeleteIcon from "@mui/icons-material/Delete";
 
 export default function IssueStock({ onIssued }) {
+  const [warehouses, setWarehouses] = useState([]);
+  const [warehouseId, setWarehouseId] = useState(""); // 👈 מחסן מקור
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [customer, setCustomer] = useState("");
   const [deliveredTo, setDeliveredTo] = useState("");
-  const [personalNumber, setPersonalNumber] = useState(""); // חדש: מספר אישי
+  const [personalNumber, setPersonalNumber] = useState("");
   const [items, setItems] = useState([{ product: "", quantity: 1 }]);
   const [signature, setSignature] = useState(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // טוען מחסנים + לקוחות פעם אחת
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const [prodsRes, custsRes] = await Promise.all([
-          api.get("/api/products"),
+        const [whRes, custsRes] = await Promise.all([
+          api.get("/api/warehouses"),
           api.get("/api/customers"),
         ]);
         if (!mounted) return;
-        setProducts(Array.isArray(prodsRes.data) ? prodsRes.data : []);
+        setWarehouses(Array.isArray(whRes.data) ? whRes.data : []);
         setCustomers(Array.isArray(custsRes.data) ? custsRes.data : []);
       } catch {
         if (!mounted) return;
-        setProducts([]);
+        setWarehouses([]);
         setCustomers([]);
       }
     })();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
+
+  // טען מוצרים לפי מחסן
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        if (!warehouseId) {
+          setProducts([]);
+          return;
+        }
+        const res = await api.get("/api/products", { params: { warehouseId } });
+        if (!mounted) return;
+        setProducts(Array.isArray(res.data) ? res.data : []);
+        // איפוס בחירות מוצרים אם המחסן השתנה
+        setItems([{ product: "", quantity: 1 }]);
+      } catch {
+        if (!mounted) return;
+        setProducts([]);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [warehouseId]);
 
   const sortedProducts = useMemo(() => {
     return [...products].sort((a, b) =>
@@ -79,6 +102,10 @@ export default function IssueStock({ onIssued }) {
     setError("");
     setSuccess("");
 
+    if (!warehouseId) {
+      setError("יש לבחור מחסן ממנו ינופק המלאי");
+      return;
+    }
     if (!customer || !String(customer).trim()) {
       setError("יש לבחור לקוח");
       return;
@@ -109,13 +136,15 @@ export default function IssueStock({ onIssued }) {
       return;
     }
 
-    // בדיקת כמות מול מלאי (בקליינט, אופציונלי)
-    const productMap = new Map(
-      products.map((p) => [String(p._id || p.id), p])
-    );
+    // בדיקת כמות מול מלאי (קליינט)
+    const productMap = new Map(products.map((p) => [String(p._id || p.id), p]));
     for (const row of items) {
       const p = productMap.get(String(row.product));
-      if (p && Number(row.quantity) > Number(p.stock || 0)) {
+      if (!p) {
+        setError("נבחר מוצר לא תקין עבור המחסן הזה");
+        return;
+      }
+      if (Number(row.quantity) > Number(p.stock || 0)) {
         setError(`הכמות המבוקשת למוצר "${p.name}" גבוהה מהמלאי הקיים`);
         return;
       }
@@ -129,27 +158,28 @@ export default function IssueStock({ onIssued }) {
         quantity: Number(i.quantity),
       }));
 
-      // שליפת שם הלקוח לפי ה-ID
       const selectedCustomerObj = customers.find(
         (c) => String(c._id || c.id) === String(customer)
       );
       const customerName = selectedCustomerObj ? selectedCustomerObj.name : "";
 
       const body = {
+        warehouseId, // 👈 נשלח לשרת
         items: cleanItems,
         signature,
         deliveredTo,
         customer: String(customer),
         customerName,
-        personalNumber: personalNumber.trim(), // חדש: עובר לשרת
+        personalNumber: personalNumber.trim(),
       };
 
       await api.post("/api/deliveries", body);
 
       setSuccess("ניפוק בוצע בהצלחה");
+      setWarehouseId("");
       setCustomer("");
       setDeliveredTo("");
-      setPersonalNumber(""); // איפוס
+      setPersonalNumber("");
       setItems([{ product: "", quantity: 1 }]);
       setSignature(null);
       if (onIssued) onIssued();
@@ -174,41 +204,42 @@ export default function IssueStock({ onIssued }) {
           position: "relative",
         }}
       >
-        <Typography
-          variant="h5"
-          mb={3}
-          fontWeight="bold"
-          textAlign="center"
-          dir="rtl"
-        >
+        <Typography variant="h5" mb={3} fontWeight="bold" textAlign="center">
           ניפוק מלאי ללקוח
         </Typography>
 
         <form onSubmit={handleIssue}>
           <Stack spacing={3}>
+            {/* מחסן מקור */}
             <FormControl fullWidth required>
-              <InputLabel
-                id="customer-select-label"
+              <InputLabel id="warehouse-select-label">בחר מחסן</InputLabel>
+              <Select
+                labelId="warehouse-select-label"
+                value={warehouseId}
+                label="בחר מחסן"
+                onChange={(e) => setWarehouseId(e.target.value)}
                 sx={{ direction: "rtl", textAlign: "right" }}
               >
-                בחר לקוח
-              </InputLabel>
+                {warehouses.map((w) => (
+                  <MenuItem key={w._id || w.id} value={String(w._id || w.id)}>
+                    {w.name || "(ללא שם)"}{w.address ? ` — ${w.address}` : ""}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            {/* לקוח */}
+            <FormControl fullWidth required>
+              <InputLabel id="customer-select-label">בחר לקוח</InputLabel>
               <Select
                 labelId="customer-select-label"
-                id="customer-select"
-                name="customer"
                 value={customer}
                 label="בחר לקוח"
                 onChange={(e) => setCustomer(e.target.value)}
                 sx={{ direction: "rtl", textAlign: "right" }}
-                inputProps={{ id: "customer-select-input" }}
               >
                 {customers.map((c) => (
-                  <MenuItem
-                    key={c._id || c.id}
-                    value={String(c._id || c.id)}
-                    sx={{ direction: "rtl" }}
-                  >
+                  <MenuItem key={c._id || c.id} value={String(c._id || c.id)}>
                     {c.name}
                   </MenuItem>
                 ))}
@@ -225,7 +256,6 @@ export default function IssueStock({ onIssued }) {
               inputProps={{ style: { textAlign: "right" } }}
             />
 
-            {/* חדש: מספר אישי */}
             <TextField
               label="מספר אישי"
               value={personalNumber}
@@ -236,6 +266,7 @@ export default function IssueStock({ onIssued }) {
               inputProps={{ style: { textAlign: "right" } }}
             />
 
+            {/* שורות פריטים */}
             {items.map((item, idx) => (
               <Stack
                 key={idx}
@@ -244,31 +275,17 @@ export default function IssueStock({ onIssued }) {
                 alignItems="center"
                 justifyContent="space-between"
               >
-                <FormControl sx={{ flex: 1 }} required>
-                  <InputLabel
-                    id={`product-select-label-${idx}`}
-                    sx={{ direction: "rtl", textAlign: "right" }}
-                  >
-                    בחר מוצר
-                  </InputLabel>
+                <FormControl sx={{ flex: 1 }} required disabled={!warehouseId}>
+                  <InputLabel id={`product-select-label-${idx}`}>בחר מוצר</InputLabel>
                   <Select
                     labelId={`product-select-label-${idx}`}
-                    id={`product-select-${idx}`}
-                    name={`product-${idx}`}
                     value={item.product ? String(item.product) : ""}
                     label="בחר מוצר"
-                    onChange={(e) =>
-                      handleItemChange(idx, "product", e.target.value)
-                    }
+                    onChange={(e) => handleItemChange(idx, "product", e.target.value)}
                     sx={{ direction: "rtl", textAlign: "right" }}
-                    inputProps={{ id: `product-select-input-${idx}` }}
                   >
                     {sortedProducts.map((p) => (
-                      <MenuItem
-                        key={p._id || p.id}
-                        value={String(p._id || p.id)}
-                        sx={{ direction: "rtl" }}
-                      >
+                      <MenuItem key={p._id || p.id} value={String(p._id || p.id)}>
                         {p.sku ? `[${p.sku}] ` : ""}{p.name} (במלאי: {p.stock})
                       </MenuItem>
                     ))}
@@ -280,11 +297,10 @@ export default function IssueStock({ onIssued }) {
                   type="number"
                   inputProps={{ min: 1, style: { textAlign: "right" } }}
                   value={item.quantity}
-                  onChange={(e) =>
-                    handleItemChange(idx, "quantity", e.target.value)
-                  }
+                  onChange={(e) => handleItemChange(idx, "quantity", e.target.value)}
                   required
                   sx={{ width: 120 }}
+                  disabled={!warehouseId}
                 />
 
                 {items.length > 1 && (
@@ -295,11 +311,12 @@ export default function IssueStock({ onIssued }) {
               </Stack>
             ))}
 
-            <Button variant="contained" onClick={handleAddItem} sx={{ mt: 1 }}>
+            <Button variant="outlined" onClick={handleAddItem} disabled={!warehouseId}>
               הוסף מוצר נוסף
             </Button>
 
-            <Box sx={{ direction: "rtl", textAlign: "right" }}>
+            {/* חתימה */}
+            <Box>
               <Typography mb={1}>חתימה דיגיטלית (חובה):</Typography>
               <SimpleSignaturePad onEnd={setSignature} />
             </Box>
@@ -313,23 +330,11 @@ export default function IssueStock({ onIssued }) {
               sx={{ fontWeight: "bold" }}
               disabled={loading}
             >
-              {loading ? (
-                <CircularProgress size={24} color="inherit" />
-              ) : (
-                "נפק"
-              )}
+              {loading ? <CircularProgress size={24} color="inherit" /> : "נפק"}
             </Button>
 
-            {error && (
-              <Alert severity="error" dir="rtl">
-                {error}
-              </Alert>
-            )}
-            {success && (
-              <Alert severity="success" dir="rtl">
-                {success}
-              </Alert>
-            )}
+            {error && <Alert severity="error">{error}</Alert>}
+            {success && <Alert severity="success">{success}</Alert>}
           </Stack>
         </form>
       </Paper>

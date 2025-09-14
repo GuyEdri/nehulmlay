@@ -1,0 +1,54 @@
+[33m179ddff[m[33m ([m[1;36mHEAD -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m Revert "asd"
+[33m8979be3[m Revert "Revert "asd""
+[33ma52a1df[m Revert "Revert "asd""
+[33m6c1ae9b[m Revert "asd"
+[33m6876a37[m Revert "asd"
+[33m2d5d5db[m asd
+[33m1a1ffeb[m asd
+[33mb43777c[m firestore
+[33m9847156[m s
+[33m702440c[m asd
+[33me60e309[m s
+[33md547663[m warehouses create
+[33m95ded5d[m asd
+[33m79dc940[m sheyuh le warehouse
+[33mcff93f3[m Warehouses
+[33mbb96a6a[m Firstoreservice
+[33m93bff0b[m Warehouses
+[33m3768c9a[m Warehouses
+[33m1cd7775[m warehouses
+[33m4cf3669[m warehouses
+[33m3bb6f94[m test
+[33mea0dfd5[m Revert "Revert "serach by containers""
+[33medc4029[m Revert "serach by containers"
+[33m2f1bd89[m serach by containers
+[33m380a825[m asd
+[33m61c5ce9[m asd
+[33mc390d6f[m asd
+[33m554e793[m pdf
+[33m2f40fcb[m pdf
+[33md778d4f[m pdf
+[33meb4a6f3[m pdf
+[33ma4d9ebe[m pdf
+[33me8fb4a2[m PDF RTL
+[33mc10e59d[m PDF RTL
+[33md095c0e[m PDF RTL
+[33mb01e2c9[m PDF RTL
+[33ma4e28fe[m PDF RTL
+[33m22666b7[m PDF RTL
+[33m7345bfd[m update
+[33mc7d40cb[m PDF RTL
+[33m80e5cba[m wello
+[33m3c30d74[m Login
+[33mcf371bf[m Login
+[33m4a1af68[m MAKAT
+[33mf3e36ef[m PDF fix
+[33mc852b61[m update
+[33mb81c9c6[m Logo path update
+[33mbdd6e18[m fix: logo path in CSS for Render build
+[33mec9775c[m Add frontend as regular folder
+[33m0171a72[m Deploy: backend CORS+limits, frontend api client, fixes
+[33md826d8f[m Stop tracking node_modules and add .gitignore
+[33m348542d[m Ignore service account file
+[33m2eea71b[m Deploy
+[33m807b9b0[m deploy

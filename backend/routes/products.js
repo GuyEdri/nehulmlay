@@ -2,71 +2,64 @@
 import express from "express";
 import {
   getAllProducts,
-  getProductsByWarehouse,
-  getProductsByWarehouseName,
   getProductById,
+  getProductBySku,
   addProduct,
   updateProduct,
   deleteProduct,
   updateProductStock,
   getProductsGroupedByContainer,
   getProductsByContainer,
+  getProductsByWarehouse, // 👈 חדש
 } from "../firestoreService.js";
 
 const router = express.Router();
 
-// GET - חיפוש/קיבוץ/סינון לפי מחסן (ID או שם)
+// GET - כל המוצרים / חיפוש / קיבוץ לפי מכולה / פילטר לפי מכולה / פילטר לפי מחסן
 router.get("/", async (req, res) => {
   try {
-    const { search = "", groupBy = "", container = "", warehouseId = "", warehouseName = "" } = req.query;
+    const { search = "", groupBy = "", container = "", warehouseId = "" } = req.query;
 
+    // 1) קיבוץ לפי מכולה
     if (String(groupBy).toLowerCase() === "container") {
       const grouped = await getProductsGroupedByContainer();
       return res.json({ groupedBy: "container", groups: grouped });
     }
 
+    // 2) פילטר לפי מכולה
     if (container) {
       const items = await getProductsByContainer(container);
       const term = String(search).trim();
-      const filtered = term
-        ? items.filter((p) => {
-            const up = term.toUpperCase();
-            const low = term.toLowerCase();
-            return String(p.name || "").toLowerCase().includes(low) ||
-                   String(p.sku || "").toUpperCase().includes(up);
-          })
-        : items;
+      let filtered = items;
+      if (term) {
+        const up = term.toUpperCase();
+        const low = term.toLowerCase();
+        filtered = items.filter((p) => {
+          const name = String(p.name || "");
+          const sku = String(p.sku || "");
+          return name.toLowerCase().includes(low) || sku.toUpperCase().includes(up);
+        });
+      }
       return res.json(filtered);
     }
 
+    // 3) פילטר לפי מחסן
     if (warehouseId) {
-      const items = await getProductsByWarehouse(warehouseId);
+      let items = await getProductsByWarehouse(warehouseId);
       const term = String(search).trim();
-      const filtered = term
-        ? items.filter((p) => {
-            const up = term.toUpperCase();
-            const low = term.toLowerCase();
-            return String(p.name || "").toLowerCase().includes(low) ||
-                   String(p.sku || "").toUpperCase().includes(up);
-          })
-        : items;
-      return res.json(filtered);
+      if (term) {
+        const up = term.toUpperCase();
+        const low = term.toLowerCase();
+        items = items.filter((p) => {
+          const name = String(p.name || "");
+          const sku = String(p.sku || "");
+          return name.toLowerCase().includes(low) || sku.toUpperCase().includes(up);
+        });
+      }
+      return res.json(items);
     }
 
-    if (warehouseName) {
-      const items = await getProductsByWarehouseName(warehouseName);
-      const term = String(search).trim();
-      const filtered = term
-        ? items.filter((p) => {
-            const up = term.toUpperCase();
-            const low = term.toLowerCase();
-            return String(p.name || "").toLowerCase().includes(low) ||
-                   String(p.sku || "").toUpperCase().includes(up);
-          })
-        : items;
-      return res.json(filtered);
-    }
-
+    // 4) ברירת מחדל: כל המוצרים + חיפוש
     let products = await getAllProducts();
     const term = String(search).trim();
     if (term) {
@@ -91,69 +84,67 @@ router.get("/:id", async (req, res) => {
   try {
     const p = await getProductById(req.params.id);
     res.json(p);
-  } catch {
+  } catch (err) {
     res.status(404).json({ error: "Product not found" });
   }
 });
 
-// POST - הוספת/עדכון (UPSERT) מוצר לפי (SKU, מחסן)
+// POST - הוספת מוצר חדש
 router.post("/", async (req, res) => {
   try {
-    const {
-      name,
-      sku,
-      description = "",
-      stock = 0,
-      warehouseId = "",
-      warehouseName = "",
-    } = req.body;
+    const { name, sku, description = "", stock = 0, warehouseId = "", warehouseName = "" } = req.body;
 
-    const product = await addProduct({
-      name,
-      sku,
-      description,
-      stock,
-      warehouseId,
-      warehouseName,
+    const cleanName = String(name || "").trim();
+    const cleanSku = String(sku || "").trim().toUpperCase();
+    const qty = Number(stock);
+
+    if (!cleanName) return res.status(400).json({ error: "שם מוצר חייב להיות מחרוזת תקינה" });
+    if (!cleanSku) return res.status(400).json({ error: "מקט (SKU) חובה" });
+    if (!Number.isFinite(qty) || qty < 0) {
+      return res.status(400).json({ error: "מלאי חייב להיות מספר 0 ומעלה" });
+    }
+
+    const newProduct = await addProduct({
+      name: cleanName,
+      sku: cleanSku,
+      description: String(description).trim(),
+      stock: qty,
+      warehouseId: String(warehouseId || "").trim(),
+      warehouseName: String(warehouseName || "").trim(),
+      createdAt: new Date(),
     });
 
-    // אם בוצע upsert נחזיר 200 רגיל, אחרת 201
-    const status = product?._upsert ? 200 : 201;
-    res.status(status).json(product);
+    res.status(201).json(newProduct);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 
 // PUT - עדכון מוצר
 router.put("/:id", async (req, res) => {
   try {
-    const id = req.params.id;
-    const updates = { ...req.body };
-    const updatedProduct = await updateProduct(id, updates);
-    res.json(updatedProduct);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-// PUT - עדכון מלאי יחסי
-router.put("/:id/stock", async (req, res) => {
-  try {
-    const id = req.params.id;
-    const { diff } = req.body;
-    const delta = Number(diff);
-    if (!Number.isFinite(delta) || delta === 0) {
-      return res.status(400).json({ error: "diff חייב להיות מספר שונה מאפס" });
-    }
-    const updatedProduct = await updateProductStock(id, delta);
+    const updatedProduct = await updateProduct(req.params.id, req.body || {});
     res.json(updatedProduct);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// DELETE
+// PUT - עדכון מלאי יחסי
+router.put("/:id/stock", async (req, res) => {
+  try {
+    const delta = Number(req.body?.diff);
+    if (!Number.isFinite(delta) || delta === 0) {
+      return res.status(400).json({ error: "diff חייב להיות מספר שונה מאפס" });
+    }
+    const updatedProduct = await updateProductStock(req.params.id, delta);
+    res.json(updatedProduct);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE - מחיקת מוצר
 router.delete("/:id", async (req, res) => {
   try {
     await deleteProduct(req.params.id);
