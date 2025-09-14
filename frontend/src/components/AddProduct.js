@@ -1,5 +1,5 @@
 // frontend/src/components/AddProduct.js
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { api } from "../api";
 
 export default function AddProduct({ onAdd }) {
@@ -7,14 +7,15 @@ export default function AddProduct({ onAdd }) {
   const [sku, setSku] = useState("");
   const [description, setDescription] = useState("");
   const [stock, setStock] = useState(""); // נשמר כטקסט כדי להימנע מ-NaN בזמן הקלדה
-  const [warehouseId, setWarehouseId] = useState(""); // ← חדש
-  const [warehouses, setWarehouses] = useState([]);   // ← חדש
+
+  // 👇 חדש: מחסנים ושיוך
+  const [warehouses, setWarehouses] = useState([]);
+  const [warehouseId, setWarehouseId] = useState(""); // "" = ללא שיוך
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // טען מחסנים לבחירה
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -27,14 +28,10 @@ export default function AddProduct({ onAdd }) {
         setWarehouses([]);
       }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
-
-  const warehouseOptions = useMemo(() => {
-    return warehouses
-      .map((w) => ({ id: String(w._id || w.id), name: w.name || "(ללא שם)" }))
-      .sort((a, b) => a.name.localeCompare(b.name, "he"));
-  }, [warehouses]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -60,20 +57,22 @@ export default function AddProduct({ onAdd }) {
 
     try {
       setLoading(true);
-      await api.post("/api/products", {
+      const body = {
         name: cleanName,
         sku: cleanSku,
         description: (description || "").trim(),
         stock: qty,
-        warehouseId: warehouseId || "", // ← חדש (רשות)
-      });
+      };
+      if (warehouseId) body.warehouseId = warehouseId; // 👈 שליחה רק אם נבחר
+
+      await api.post("/api/products", body);
 
       // איפוס טופס
       setName("");
       setSku("");
       setDescription("");
       setStock("");
-      setWarehouseId("");
+      setWarehouseId(""); // איפוס שיוך
       setSuccess("המוצר נוסף בהצלחה");
       if (onAdd) onAdd();
     } catch (err) {
@@ -86,7 +85,7 @@ export default function AddProduct({ onAdd }) {
   return (
     <form
       onSubmit={handleSubmit}
-      style={{ maxWidth: 480, margin: "auto", direction: "rtl" }}
+      style={{ maxWidth: 420, margin: "auto", direction: "rtl" }}
     >
       <h3 style={{ textAlign: "center" }}>הוספת מוצר חדש</h3>
 
@@ -150,27 +149,26 @@ export default function AddProduct({ onAdd }) {
         }}
       />
 
-      {/* בחירת מחסן (רשות) */}
-      <div style={{ marginBottom: 10 }}>
-        <label style={{ display: "block", marginBottom: 6 }}>שייך למחסן (רשות)</label>
-        <select
-          value={warehouseId}
-          onChange={(e) => setWarehouseId(e.target.value)}
-          style={{
-            width: "100%",
-            padding: 8,
-            boxSizing: "border-box",
-            textAlign: "right",
-          }}
-        >
-          <option value="">— ללא שיוך —</option>
-          {warehouseOptions.map((w) => (
-            <option key={w.id} value={w.id}>
-              {w.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* 👇 חדש: בחירת מחסן (רשות) */}
+      <label style={{ display: "block", marginBottom: 6 }}>שיוך למחסן (רשות)</label>
+      <select
+        value={warehouseId}
+        onChange={(e) => setWarehouseId(e.target.value)}
+        style={{
+          width: "100%",
+          padding: 8,
+          marginBottom: 12,
+          boxSizing: "border-box",
+          textAlign: "right",
+        }}
+      >
+        <option value="">ללא שיוך</option>
+        {warehouses.map((w) => (
+          <option key={w._id || w.id} value={String(w._id || w.id)}>
+            {w.name || "(ללא שם)"}{w.address ? ` — ${w.address}` : ""}
+          </option>
+        ))}
+      </select>
 
       <button
         type="submit"
