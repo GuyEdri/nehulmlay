@@ -43,7 +43,7 @@ export async function getWarehouseByName(nameRaw) {
   return { id: d.id, _id: d.id, ...d.data() };
 }
 
-/* עזר: הפיכת שיוך מחסן ל-id+name קנוניים (כולל "" כערך ברירת מחדל) */
+/** קיבוע שיוך למחסן כזוג (warehouseId, warehouseName). אם אין — שניהם "". */
 async function resolveWarehousePair({ warehouseId, warehouseName }) {
   let wid = String(warehouseId || "").trim();
   let wname = String(warehouseName || "").trim();
@@ -57,7 +57,6 @@ async function resolveWarehousePair({ warehouseId, warehouseName }) {
     if (!wh) throw new Error("warehouseName לא קיים");
     return { warehouseId: wh.id, warehouseName: String(wh.name || "") };
   }
-  // ללא שיוך
   return { warehouseId: "", warehouseName: "" };
 }
 
@@ -96,7 +95,6 @@ function normalizeWid(v) {
   const s = String(v ?? "").trim();
   return s === "null" || s === "undefined" ? "" : s;
 }
-
 function isEmptyWid(v) {
   return v === undefined || v === null || String(v).trim() === "";
 }
@@ -134,10 +132,11 @@ export async function getProductBySku(rawSku) {
   return { id: doc.id, _id: doc.id, ...doc.data() };
 }
 
-/* עזר: מציאת מוצר לפי (SKU, warehouseId) — מתחשב גם במסמכים ישנים ללא warehouseId */
+/** עזר: מציאת מוצר לפי (SKU, warehouseId) — מתחשב במסמכים ישנים ללא warehouseId */
 async function getProductBySkuAndWarehouseFlexible(sku, warehouseId) {
   const wid = normalizeWid(warehouseId);
-  // קודם חיפוש מדויק
+
+  // 1) התאמה מדויקת
   let snap = await productsCol
     .where("sku", "==", sku)
     .where("warehouseId", "==", wid)
@@ -148,56 +147,58 @@ async function getProductBySkuAndWarehouseFlexible(sku, warehouseId) {
     return { doc: d, data: d.data(), reason: "exact" };
   }
 
-  // אם מחסן יעד ריק, חפש מסמך SKU ללא שדה warehouseId או עם ""
+  // 2) יעד ללא שיוך: מסמך SKU ללא warehouseId/ריק
   if (wid === "") {
     const allSku = await productsCol.where("sku", "==", sku).get();
-    const legacy = allSku.docs.filter(
-      (d) => isEmptyWid(d.data().warehouseId)
-    );
+    const legacy = allSku.docs.filter((d) => isEmptyWid(d.data().warehouseId));
     if (legacy.length === 1) {
       return { doc: legacy[0], data: legacy[0].data(), reason: "legacy-empty" };
     }
     return null;
   }
 
-  // אם מחסן יעד לא ריק:
-  // 1) בדוק אם יש legacy אחד (ללא שיוך) ואינו מתנגש עם מוצר במחסן היעד
+  // 3) יעד עם מחסן: אם יש legacy יחיד ואין כבר במסמך היעד → נבצע מיגרציה רכה
   const allSku = await productsCol.where("sku", "==", sku).get();
   const legacy = allSku.docs.filter((d) => isEmptyWid(d.data().warehouseId));
-  const inTarget = allSku.docs.find((d) => normalizeWid(d.data().warehouseId) === wid);
-
+  const inTarget = allSku.docs.find(
+    (d) => normalizeWid(d.data().warehouseId) === wid
+  );
   if (!inTarget && legacy.length === 1) {
-    return { doc: legacy[0], data: legacy[0].data(), reason: "migrate-legacy-to-target" };
+    return {
+      doc: legacy[0],
+      data: legacy[0].data(),
+      reason: "migrate-legacy-to-target",
+    };
   }
 
   return null;
 }
 
-/* === UPSERT לפי (SKU, מחסן) עם טיפול במסמכי עבר === */
+/** UPSERT לפי (SKU, מחסן) — כולל טיפול במסמכים ישנים בלי warehouseId */
 export async function addProduct(data) {
   const name = String(data?.name || "").trim();
   const sku = String(data?.sku || "").trim().toUpperCase();
   const stockToAdd = Number(data?.stock ?? 0);
   if (!name) throw new Error("שם מוצר חייב להיות מחרוזת תקינה");
   if (!sku) throw new Error("מקט (SKU) חובה");
-  if (!Number.isFinite(stockToAdd) || stockToAdd < 0) throw new Error("מלאי חייב להיות מספר 0 ומעלה");
+  if (!Number.isFinite(stockToAdd) || stockToAdd < 0) {
+    throw new Error("מלאי חייב להיות מספר 0 ומעלה");
+  }
 
-  // קבע שיוך מחסן (id + name) – תמיד שדות קיימים (כולל "" כשאין שיוך)
   const { warehouseId, warehouseName } = await resolveWarehousePair({
     warehouseId: data?.warehouseId,
     warehouseName: data?.warehouseName,
   });
 
-  // חפש התאמה/legacy
   const match = await getProductBySkuAndWarehouseFlexible(sku, warehouseId);
 
   if (match) {
     const { doc, data: cur, reason } = match;
     const docRef = productsCol.doc(doc.id);
 
-    // אם צריך "לגייר" מסמך מורשת למחסן היעד (reason === migrate-legacy-to-target)
     const setWarehouse =
-      reason === "migrate-legacy-to-target" || (reason === "legacy-empty" && warehouseId !== "");
+      reason === "migrate-legacy-to-target" ||
+      (reason === "legacy-empty" && warehouseId !== "");
 
     const patch = {
       stock: Number(cur.stock || 0) + stockToAdd,
@@ -210,14 +211,19 @@ export async function addProduct(data) {
       patch.warehouseId = warehouseId;
       patch.warehouseName = warehouseName;
     } else if (reason === "legacy-empty" && warehouseId === "") {
-      // נשמור מפורשות "" כדי לקבע סכימה
       patch.warehouseId = "";
       patch.warehouseName = "";
     }
 
     await docRef.update(patch);
     const updated = await docRef.get();
-    return { id: updated.id, _id: updated.id, ...updated.data(), _upsert: true, _reason: reason };
+    return {
+      id: updated.id,
+      _id: updated.id,
+      ...updated.data(),
+      _upsert: true,
+      _reason: reason,
+    };
   }
 
   // יצירה חדשה
@@ -246,7 +252,7 @@ export async function updateProduct(id, updates) {
   if (patch.sku != null) {
     const newSku = String(patch.sku).trim().toUpperCase();
     if (!newSku) throw new Error("מקט (SKU) לא תקין");
-    // ייחודיות בתוך אותו מחסן (מתחשב ב-"" כמורשת):
+    // ייחודיות בתוך אותו מחסן (מתחשב ב-"" כמקרה ישן):
     const wid = normalizeWid(current.warehouseId);
     const allSku = await productsCol.where("sku", "==", newSku).get();
     const dup = allSku.docs.find(
@@ -258,11 +264,13 @@ export async function updateProduct(id, updates) {
 
   if (patch.stock != null) {
     const s = Number(patch.stock);
-    if (!Number.isFinite(s) || s < 0) throw new Error("מלאי חייב להיות מספר 0 ומעלה");
+    if (!Number.isFinite(s) || s < 0) {
+      throw new Error("מלאי חייב להיות מספר 0 ומעלה");
+    }
     patch.stock = s;
   }
 
-  // שינוי שיוך מחסן (מאפשרים לעדכן; נשמרים שני השדות)
+  // שינוי שיוך מחסן
   if (patch.warehouseId !== undefined || patch.warehouseName !== undefined) {
     const { warehouseId, warehouseName } = await resolveWarehousePair({
       warehouseId: patch.warehouseId ?? current.warehouseId,
@@ -273,7 +281,9 @@ export async function updateProduct(id, updates) {
     const newSku = (patch.sku ?? current.sku || "").toUpperCase();
     const allSku = await productsCol.where("sku", "==", newSku).get();
     const dup = allSku.docs.find(
-      (d) => d.id !== id && normalizeWid(d.data().warehouseId) === normalizeWid(warehouseId)
+      (d) =>
+        d.id !== id &&
+        normalizeWid(d.data().warehouseId) === normalizeWid(warehouseId)
     );
     if (dup) throw new Error("מקט כבר קיים במחסן היעד");
 
@@ -312,7 +322,8 @@ export async function getProductsGroupedByContainer() {
   snapshot.forEach((doc) => {
     const data = doc.data() || {};
     const desc = data.description || "";
-    const container = (data.container && String(data.container).trim()) || extractContainer(desc);
+    const container =
+      (data.container && String(data.container).trim()) || extractContainer(desc);
     if (!groups[container]) groups[container] = [];
     groups[container].push({ id: doc.id, _id: doc.id, ...data, container });
   });
@@ -329,7 +340,10 @@ export async function getProductsByContainer(containerRaw) {
   if (!container) return [];
   const all = await getAllProducts();
   return all
-    .map((p) => ({ ...p, container: p.container || extractContainer(p.description || "") }))
+    .map((p) => ({
+      ...p,
+      container: p.container || extractContainer(p.description || ""),
+    }))
     .filter((p) => p.container.toUpperCase() === container);
 }
 
@@ -367,7 +381,21 @@ export async function deleteCustomer(id) {
 /* ================== DELIVERIES ================== */
 const deliveriesCol = db.collection("deliveries");
 
-export async function getAllDeliveries() {
+/** תמיכה בסינון אופציונלי לפי productId (כמו שהראוטר שלך מצפה) */
+export async function getAllDeliveries(productId = null) {
+  if (productId) {
+    const pid = String(productId);
+    const snap = await deliveriesCol.get();
+    const list = [];
+    snap.forEach((d) => {
+      const data = d.data() || {};
+      const items = Array.isArray(data.items) ? data.items : [];
+      if (items.some((i) => String(i.product) === pid)) {
+        list.push({ id: d.id, _id: d.id, ...data });
+      }
+    });
+    return list;
+  }
   const snapshot = await deliveriesCol.get();
   return snapshot.docs.map((d) => ({ id: d.id, _id: d.id, ...d.data() }));
 }
