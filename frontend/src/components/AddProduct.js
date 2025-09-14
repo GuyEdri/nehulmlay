@@ -1,5 +1,5 @@
 // frontend/src/components/AddProduct.js
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 
 export default function AddProduct({ onAdd }) {
@@ -7,9 +7,34 @@ export default function AddProduct({ onAdd }) {
   const [sku, setSku] = useState("");
   const [description, setDescription] = useState("");
   const [stock, setStock] = useState(""); // נשמר כטקסט כדי להימנע מ-NaN בזמן הקלדה
+  const [warehouseId, setWarehouseId] = useState(""); // ← חדש
+  const [warehouses, setWarehouses] = useState([]);   // ← חדש
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // טען מחסנים לבחירה
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await api.get("/api/warehouses");
+        if (!mounted) return;
+        setWarehouses(Array.isArray(res.data) ? res.data : []);
+      } catch {
+        if (!mounted) return;
+        setWarehouses([]);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  const warehouseOptions = useMemo(() => {
+    return warehouses
+      .map((w) => ({ id: String(w._id || w.id), name: w.name || "(ללא שם)" }))
+      .sort((a, b) => a.name.localeCompare(b.name, "he"));
+  }, [warehouses]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -40,6 +65,7 @@ export default function AddProduct({ onAdd }) {
         sku: cleanSku,
         description: (description || "").trim(),
         stock: qty,
+        warehouseId: warehouseId || "", // ← חדש (רשות)
       });
 
       // איפוס טופס
@@ -47,6 +73,7 @@ export default function AddProduct({ onAdd }) {
       setSku("");
       setDescription("");
       setStock("");
+      setWarehouseId("");
       setSuccess("המוצר נוסף בהצלחה");
       if (onAdd) onAdd();
     } catch (err) {
@@ -59,7 +86,7 @@ export default function AddProduct({ onAdd }) {
   return (
     <form
       onSubmit={handleSubmit}
-      style={{ maxWidth: 400, margin: "auto", direction: "rtl" }}
+      style={{ maxWidth: 480, margin: "auto", direction: "rtl" }}
     >
       <h3 style={{ textAlign: "center" }}>הוספת מוצר חדש</h3>
 
@@ -122,6 +149,28 @@ export default function AddProduct({ onAdd }) {
           textAlign: "right",
         }}
       />
+
+      {/* בחירת מחסן (רשות) */}
+      <div style={{ marginBottom: 10 }}>
+        <label style={{ display: "block", marginBottom: 6 }}>שייך למחסן (רשות)</label>
+        <select
+          value={warehouseId}
+          onChange={(e) => setWarehouseId(e.target.value)}
+          style={{
+            width: "100%",
+            padding: 8,
+            boxSizing: "border-box",
+            textAlign: "right",
+          }}
+        >
+          <option value="">— ללא שיוך —</option>
+          {warehouseOptions.map((w) => (
+            <option key={w.id} value={w.id}>
+              {w.name}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <button
         type="submit"

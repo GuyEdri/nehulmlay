@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 import customersRouter from "./routes/customers.js";
 import productsRouter from "./routes/products.js";
 import deliveriesRouter from "./routes/deliveries.js";
+import warehousesRouter from "./routes/warehouses.js"; // ← חדש
 import { verifyAuth } from "./middleware/auth.js";
 
 const app = express();
@@ -44,20 +45,21 @@ const corsMiddleware = cors({
 
 app.use(corsMiddleware);
 
-// (אופציונלי) סטטי – אם תרצה לשרת פונטים/קבצים
+// (אופציונלי) סטטי
 app.use("/static", express.static(path.resolve(__dirname, "public")));
 
-// ----- Public routes (ללא אימות) -----
+// ----- Public routes -----
 app.get("/healthz", (req, res) => res.status(200).json({ ok: true }));
 app.get("/", (req, res) => res.status(200).send("UGDA98 backend is up"));
 
-// ----- Auth guard לכל REST API -----
+// ----- Auth guard -----
 app.use("/api", verifyAuth);
 
 // ----- Protected API routes -----
 app.use("/api/customers", customersRouter);
 app.use("/api/products", productsRouter);
 app.use("/api/deliveries", deliveriesRouter);
+app.use("/api/warehouses", warehousesRouter); // ← חדש
 
 // 404 לנתיבי API
 app.use((req, res, next) => {
@@ -67,7 +69,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Error handler (כולל CORS)
+// Error handler
 app.use((err, req, res, next) => {
   if (err?.message === "Not allowed by CORS") {
     return res.status(403).json({ error: "CORS: origin not allowed" });

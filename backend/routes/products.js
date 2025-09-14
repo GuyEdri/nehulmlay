@@ -11,6 +11,8 @@ import {
   // חדשים:
   getProductsGroupedByContainer,
   getProductsByContainer,
+  // מחסן:
+  getWarehouseById,
 } from "../firestoreService.js";
 
 const router = express.Router();
@@ -26,10 +28,9 @@ router.get("/", async (req, res) => {
       return res.json({ groupedBy: "container", groups: grouped });
     }
 
-    // 2) פילטר לפי מכולה ספציפית (נוח ל־UI עם dropdown)
+    // 2) פילטר לפי מכולה ספציפית
     if (container) {
       const items = await getProductsByContainer(container);
-      // אפשר עדיין ליישם חיפוש מעל התוצאה המסוננת
       const term = String(search).trim();
       let filtered = items;
       if (term) {
@@ -74,14 +75,15 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// POST - הוספת מוצר חדש (עם SKU ייחודי)
+// POST - הוספת מוצר חדש (עם SKU ייחודי + שיוך למחסן)
 router.post("/", async (req, res) => {
   try {
-    const { name, sku, description = "", stock = 0 } = req.body;
+    const { name, sku, description = "", stock = 0, warehouseId = "" } = req.body;
 
     const cleanName = String(name || "").trim();
     const cleanSku = String(sku || "").trim().toUpperCase();
     const qty = Number(stock);
+    const wid = String(warehouseId || "").trim();
 
     if (!cleanName) {
       return res.status(400).json({ error: "שם מוצר חייב להיות מחרוזת תקינה" });
@@ -105,11 +107,23 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "מוצר בשם זה כבר קיים" });
     }
 
+    // אם נשלח warehouseId – שלוף שם מחסן ושמור גם warehouseName לנוחות
+    let warehouseName = "";
+    if (wid) {
+      try {
+        const wh = await getWarehouseById(wid);
+        warehouseName = wh?.name || "";
+      } catch {
+        return res.status(400).json({ error: "מחסן לא קיים (warehouseId שגוי)" });
+      }
+    }
+
     const newProduct = await addProduct({
       name: cleanName,
       sku: cleanSku,
       description: String(description).trim(),
       stock: qty,
+      ...(wid ? { warehouseId: wid, warehouseName } : {}),
       createdAt: new Date(),
     });
 
@@ -119,7 +133,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-// PUT - עדכון מוצר (כולל אפשרות לשנות SKU עם בדיקת ייחודיות)
+// PUT - עדכון מוצר (כולל אפשרות לשנות SKU/מחסן)
 router.put("/:id", async (req, res) => {
   try {
     const id = req.params.id;
@@ -150,6 +164,24 @@ router.put("/:id", async (req, res) => {
       updates.stock = s;
     }
 
+    // עדכון שיוך למחסן
+    if (updates.warehouseId != null) {
+      const wid = String(updates.warehouseId || "").trim();
+      if (wid) {
+        try {
+          const wh = await getWarehouseById(wid);
+          updates.warehouseId = wid;
+          updates.warehouseName = wh?.name || "";
+        } catch {
+          return res.status(400).json({ error: "מחסן לא קיים (warehouseId שגוי)" });
+        }
+      } else {
+        // ניתוק ממחסן
+        updates.warehouseId = "";
+        updates.warehouseName = "";
+      }
+    }
+
     const updatedProduct = await updateProduct(id, updates);
     res.json(updatedProduct);
   } catch (err) {
@@ -157,7 +189,7 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// PUT - עדכון מלאי מוצר בלבד (diff - שינוי מלאי חיובי/שלילי)
+// PUT - עדכון מלאי מוצר בלבד (diff)
 router.put("/:id/stock", async (req, res) => {
   try {
     const id = req.params.id;

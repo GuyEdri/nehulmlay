@@ -30,6 +30,49 @@ function extractContainer(description = "") {
   return "ללא מכולה";
 }
 
+// ============ WAREHOUSES ============
+const warehousesCol = db.collection("warehouses");
+
+export async function getAllWarehouses() {
+  const snap = await warehousesCol.get();
+  return snap.docs.map((d) => ({ id: d.id, _id: d.id, ...d.data() }));
+}
+
+export async function getWarehouseById(id) {
+  const ref = warehousesCol.doc(String(id));
+  const doc = await ref.get();
+  if (!doc.exists) throw new Error("Warehouse not found");
+  return { id: doc.id, _id: doc.id, ...doc.data() };
+}
+
+export async function addWarehouse(data) {
+  const payload = {
+    name: String(data?.name || "").trim(),
+    address: data?.address ? String(data.address).trim() : "",
+    notes: data?.notes ? String(data.notes).trim() : "",
+    createdAt: new Date(),
+  };
+  if (!payload.name) throw new Error("Warehouse name is required");
+  const ref = await warehousesCol.add(payload);
+  return { id: ref.id, _id: ref.id, ...payload };
+}
+
+export async function updateWarehouse(id, updates) {
+  const ref = warehousesCol.doc(String(id));
+  const patch = { ...updates };
+  if (patch.name != null) {
+    patch.name = String(patch.name).trim();
+    if (!patch.name) throw new Error("Invalid warehouse name");
+  }
+  await ref.update(patch);
+  const doc = await ref.get();
+  return { id: doc.id, _id: doc.id, ...doc.data() };
+}
+
+export async function deleteWarehouse(id) {
+  await warehousesCol.doc(String(id)).delete();
+}
+
 // ============ PRODUCTS ============
 const productsCol = db.collection("products");
 
@@ -60,6 +103,8 @@ export async function addProduct(data) {
   const payload = {
     ...data,
     ...(data?.sku != null ? { sku: String(data.sku).trim().toUpperCase() } : {}),
+    ...(data?.warehouseId != null ? { warehouseId: String(data.warehouseId) } : {}),
+    ...(data?.warehouseName != null ? { warehouseName: String(data.warehouseName).trim() } : {}),
   };
   const docRef = await productsCol.add(payload);
   return { id: docRef.id, _id: docRef.id, ...payload };
@@ -71,6 +116,9 @@ export async function updateProduct(id, updates) {
     updates?.sku != null
       ? { ...updates, sku: String(updates.sku).trim().toUpperCase() }
       : { ...updates };
+
+  if (patch.warehouseId != null) patch.warehouseId = String(patch.warehouseId);
+  if (patch.warehouseName != null) patch.warehouseName = String(patch.warehouseName).trim();
 
   const docRef = productsCol.doc(id);
   await docRef.update(patch);
@@ -97,10 +145,7 @@ export async function deleteProduct(id) {
   await productsCol.doc(id).delete();
 }
 
-/** חדש: החזרת מוצרים כשהם מקובצים לפי מכולה.
- *  אם יש שדה `container` במסמך—נשתמש בו; אחרת נחלץ מתוך description.
- *  מחזיר אובייקט: { [containerName]: Product[] }
- */
+/** חדש: החזרת מוצרים כשהם מקובצים לפי מכולה. */
 export async function getProductsGroupedByContainer() {
   const snapshot = await productsCol.get();
   const groups = {};
@@ -125,14 +170,10 @@ export async function getProductsGroupedByContainer() {
   return groups;
 }
 
-/** אופציונלי: מוצרים של מכולה ספציפית (עוזר ל־API / פילטרים). */
+/** אופציונלי: מוצרים של מכולה ספציפית. */
 export async function getProductsByContainer(containerRaw) {
   const container = String(containerRaw || "").trim().toUpperCase();
   if (!container) return [];
-
-  // אם יש לך שדה container מאונדקס בפיירסטור:
-  //   return (await productsCol.where("container", "==", container).get()).docs.map(...)
-  // עד אז—נסנן בזיכרון:
   const all = await getAllProducts();
   return all
     .map((p) => ({
@@ -176,11 +217,7 @@ export async function deleteCustomer(id) {
 // ============ DELIVERIES ============
 const deliveriesCol = db.collection("deliveries");
 
-/**
- * תמיכה בסינון אופציונלי לפי productId:
- * אם נשלח productId נחזיר רק ניפוקים שמכילים אותו (סינון בצד השרת).
- * אחרת – נחזיר את כל הניפוקים.
- */
+/** תמיכה בסינון אופציונלי לפי productId. */
 export async function getAllDeliveries(productId = null) {
   if (productId) {
     const pid = String(productId);
@@ -208,7 +245,6 @@ export async function getDeliveryById(id) {
 }
 
 export async function addDelivery(data) {
-  // data = { customer, customerName?, deliveredTo, items, signature, date?, personalNumber?, issuedBy*? }
   const payload = { ...data };
   const docRef = await deliveriesCol.add(payload);
   return { id: docRef.id, _id: docRef.id, ...payload };
