@@ -16,6 +16,7 @@ import { useTheme } from "@mui/material/styles";
 
 export default function ProductsList() {
   const [products, setProducts] = useState([]);
+  const [warehouses, setWarehouses] = useState([]); // 👈 חדש: רשימת מחסנים
   const [search, setSearch] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -29,6 +30,7 @@ export default function ProductsList() {
 
   const pid = (p) => String(p._id || p.id);
 
+  // --- טעינת מוצרים (עם חיפוש) ---
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
@@ -45,6 +47,38 @@ export default function ProductsList() {
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
+
+  // --- טעינת מחסנים פעם אחת ---
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await api.get("/api/warehouses");
+        if (!mounted) return;
+        setWarehouses(Array.isArray(res.data) ? res.data : []);
+      } catch (e) {
+        if (!mounted) return;
+        setWarehouses([]);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  // מפה ID→שם מחסן
+  const whMap = useMemo(() => {
+    const m = new Map();
+    (warehouses || []).forEach(w => {
+      const id = String(w._id || w.id);
+      m.set(id, w.name || "(ללא שם)");
+    });
+    return m;
+  }, [warehouses]);
+
+  const getWhName = (wid) => {
+    if (!wid) return "ללא שיוך";
+    const key = String(wid);
+    return whMap.get(key) || key; // fallback ל-id אם לא נמצא שם
+  };
 
   const handleShowHistory = (productId) => {
     setSelectedProduct(selectedProduct === productId ? null : productId);
@@ -178,6 +212,10 @@ export default function ProductsList() {
                     <Typography variant="body2">
                       כמות במלאי: <b>{busy ? "…" : p.stock}</b>
                     </Typography>
+                    {/* 👇 חדש: הצגת שם מחסן במובייל */}
+                    <Typography variant="body2">
+                      מחסן: <b>{getWhName(p.warehouseId)}</b>
+                    </Typography>
                   </Stack>
 
                   <Stack direction="row" spacing={1} alignItems="center">
@@ -214,21 +252,22 @@ export default function ProductsList() {
             <TableHead>
               <TableRow>
                 <TableCell align="right" sx={{ width: "10%" }}>מקט</TableCell>
-                <TableCell align="right" sx={{ width: "20%" }}>שם</TableCell>
-                <TableCell align="right" sx={{ width: "32%" }}>תיאור</TableCell>
+                <TableCell align="right" sx={{ width: "18%" }}>שם</TableCell>
+                <TableCell align="right" sx={{ width: "28%" }}>תיאור</TableCell>
                 <TableCell align="right" sx={{ width: "10%" }}>כמות</TableCell>
-                <TableCell align="right" sx={{ width: "28%" }}>שינוי מלאי (Δ)</TableCell>
+                <TableCell align="right" sx={{ width: "12%" }}>מחסן</TableCell> {/* 👈 חדש */}
+                <TableCell align="right" sx={{ width: "22%" }}>שינוי מלאי (Δ)</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={5} align="center">טוען...</TableCell>
+                  <TableCell colSpan={6} align="center">טוען...</TableCell>
                 </TableRow>
               )}
               {noResults && (
                 <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ color: "text.secondary" }}>
+                  <TableCell colSpan={6} align="center" sx={{ color: "text.secondary" }}>
                     לא נמצאו מוצרים
                   </TableCell>
                 </TableRow>
@@ -248,6 +287,8 @@ export default function ProductsList() {
                         {p.description}
                       </TableCell>
                       <TableCell align="right"><b>{busy ? "…" : p.stock}</b></TableCell>
+                      {/* 👇 חדש: שם מחסן */}
+                      <TableCell align="right">{getWhName(p.warehouseId)}</TableCell>
                       <TableCell align="right">
                         <Stack direction="row" spacing={1} justifyContent="flex-end" alignItems="center">
                           <StockAdjustControls id={id} />
@@ -267,7 +308,7 @@ export default function ProductsList() {
 
                     {selectedProduct === id && (
                       <TableRow>
-                        <TableCell colSpan={5} sx={{ background: "#fafafa" }}>
+                        <TableCell colSpan={6} sx={{ background: "#fafafa" }}>
                           <ProductHistory productId={id} />
                         </TableCell>
                       </TableRow>
