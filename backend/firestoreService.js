@@ -1,40 +1,25 @@
-// backend/firestoreService.js — Admin SDK version
+// backend/firestoreService.js — Admin SDK
 import { db } from "./firebaseAdmin.js";
 
-/* ===================== עזר למכולה (container) ===================== */
-
-// נירמול שם מכולה
-const normalizeContainer = (s) =>
-  String(s || "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/[^\w\u0590-\u05FF/_-]/g, "")
-    .toUpperCase();
-
-// חילוץ שם מכולה מתוך תיאור טקסטואלי (עברית/אנגלית)
+/* ================== עזר: חילוץ "מכולה" מתיאור (למסך הקיבוץ) ================== */
 function extractContainer(description = "") {
   if (!description || typeof description !== "string") return "ללא מכולה";
   const text = description.trim();
-
   const patterns = [
-    // עברית
     /מכולה[:\-\s]*([A-Za-z0-9א-ת/_-]+)\b/i,
     /קונטיינר[:\-\s]*([A-Za-z0-9א-ת/_-]+)\b/i,
     /\[(?:מכולה|קונטיינר)\s*:\s*([A-Za-z0-9א-ת/_-]+)\]/i,
-    // אנגלית
     /container[:\-\s]*([A-Za-z0-9/_-]+)\b/i,
     /\[(?:container|cnt)\s*:\s*([A-Za-z0-9/_-]+)\]/i,
   ];
-
   for (const re of patterns) {
     const m = text.match(re);
-    if (m && m[1]) return normalizeContainer(m[1]);
+    if (m && m[1]) return String(m[1]).toUpperCase();
   }
   return "ללא מכולה";
 }
 
-/* ========================= WAREHOUSES ========================= */
-
+/* ================== WAREHOUSES ================== */
 const warehousesCol = db.collection("warehouses");
 
 export async function getAllWarehouses() {
@@ -47,6 +32,15 @@ export async function getWarehouseById(id) {
   const doc = await ref.get();
   if (!doc.exists) throw new Error("Warehouse not found");
   return { id: doc.id, _id: doc.id, ...doc.data() };
+}
+
+export async function getWarehouseByName(nameRaw) {
+  const name = String(nameRaw || "").trim();
+  if (!name) return null;
+  const snap = await warehousesCol.where("name", "==", name).limit(1).get();
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  return { id: d.id, _id: d.id, ...d.data() };
 }
 
 export async function addWarehouse(data) {
@@ -68,9 +62,6 @@ export async function updateWarehouse(id, updates) {
     patch.name = String(patch.name).trim();
     if (!patch.name) throw new Error("Invalid warehouse name");
   }
-  if (patch.address != null) patch.address = String(patch.address).trim();
-  if (patch.notes != null) patch.notes = String(patch.notes).trim();
-
   await ref.update(patch);
   const doc = await ref.get();
   return { id: doc.id, _id: doc.id, ...doc.data() };
@@ -80,8 +71,7 @@ export async function deleteWarehouse(id) {
   await warehousesCol.doc(String(id)).delete();
 }
 
-/* =========================== PRODUCTS =========================== */
-
+/* ================== PRODUCTS ================== */
 const productsCol = db.collection("products");
 
 export async function getAllProducts() {
@@ -89,11 +79,17 @@ export async function getAllProducts() {
   return snapshot.docs.map((d) => ({ id: d.id, _id: d.id, ...d.data() }));
 }
 
-// סינון בצד-שרת לפי מחסן
 export async function getProductsByWarehouse(warehouseIdRaw) {
   const wid = String(warehouseIdRaw || "").trim();
   if (!wid) return [];
   const snap = await productsCol.where("warehouseId", "==", wid).get();
+  return snap.docs.map((d) => ({ id: d.id, _id: d.id, ...d.data() }));
+}
+
+export async function getProductsByWarehouseName(warehouseNameRaw) {
+  const wname = String(warehouseNameRaw || "").trim();
+  if (!wname) return [];
+  const snap = await productsCol.where("warehouseName", "==", wname).get();
   return snap.docs.map((d) => ({ id: d.id, _id: d.id, ...d.data() }));
 }
 
@@ -104,7 +100,6 @@ export async function getProductById(id) {
   return { id: docSnap.id, _id: docSnap.id, ...docSnap.data() };
 }
 
-// שליפה לפי SKU (מק״ט)
 export async function getProductBySku(rawSku) {
   const sku = String(rawSku || "").trim().toUpperCase();
   if (!sku) return null;
@@ -115,11 +110,52 @@ export async function getProductBySku(rawSku) {
 }
 
 export async function addProduct(data) {
+  const name = String(data?.name || "").trim();
+  const sku = String(data?.sku || "").trim().toUpperCase();
+  const stock = Number(data?.stock ?? 0);
+  if (!name) throw new Error("שם מוצר חייב להיות מחרוזת תקינה");
+  if (!sku) throw new Error("מקט (SKU) חובה");
+  if (!Number.isFinite(stock) || stock < 0) throw new Error("מלאי חייב להיות מספר 0 ומעלה");
+
+  // ייחודיות SKU
+  const existsBySku = await getProductBySku(sku);
+  if (existsBySku) throw new Error("מקט כבר קיים");
+
+  // תמיכה בשיוך לפי ID או לפי שם:
+  let warehouseId = "";
+  let warehouseName = "";
+
+  // אם הגיע warehouseId – מאמתים
+  if (data?.warehouseId) {
+    const wid = String(data.warehouseId).trim();
+    if (wid) {
+      const wh = await getWarehouseById(wid);
+      warehouseId = wh.id;
+      warehouseName = String(wh.name || "");
+    }
+  }
+
+  // אם לא הגיע ID אבל הגיע warehouseName – מחפשים לפי שם
+  if (!warehouseId && data?.warehouseName) {
+    const wname = String(data.warehouseName).trim();
+    if (wname) {
+      const wh = await getWarehouseByName(wname);
+      if (!wh) throw new Error("warehouseName לא קיים");
+      warehouseId = wh.id;
+      warehouseName = String(wh.name || "");
+    }
+  }
+
   const payload = {
-    ...data,
-    ...(data?.sku != null ? { sku: String(data.sku).trim().toUpperCase() } : {}),
-    ...(data?.warehouseId != null ? { warehouseId: String(data.warehouseId).trim() } : {}), // "" = ללא שיוך
+    name,
+    sku,
+    description: String(data?.description || "").trim(),
+    stock,
+    ...(warehouseId ? { warehouseId } : {}),
+    ...(warehouseName ? { warehouseName } : {}),
+    createdAt: new Date(),
   };
+
   const docRef = await productsCol.add(payload);
   return { id: docRef.id, _id: docRef.id, ...payload };
 }
@@ -127,12 +163,53 @@ export async function addProduct(data) {
 export async function updateProduct(id, updates) {
   const patch = { ...updates };
 
-  if (patch.sku != null) patch.sku = String(patch.sku).trim().toUpperCase();
-  if (patch.warehouseId != null) patch.warehouseId = String(patch.warehouseId).trim(); // "" תקין
+  if (patch.name != null) {
+    patch.name = String(patch.name).trim();
+    if (!patch.name) throw new Error("שם מוצר לא תקין");
+  }
+
+  if (patch.sku != null) {
+    const newSku = String(patch.sku).trim().toUpperCase();
+    if (!newSku) throw new Error("מקט (SKU) לא תקין");
+    const bySku = await getProductBySku(newSku);
+    if (bySku && String(bySku.id) !== String(id)) throw new Error("מקט כבר קיים");
+    patch.sku = newSku;
+  }
+
   if (patch.stock != null) {
     const s = Number(patch.stock);
-    if (!Number.isFinite(s) || s < 0) throw new Error("Stock must be >= 0");
+    if (!Number.isFinite(s) || s < 0) throw new Error("מלאי חייב להיות מספר 0 ומעלה");
     patch.stock = s;
+  }
+
+  // עדכון שיוך לפי ID/שם:
+  // - אם נשלח warehouseId === "" → מסירים שיוך
+  // - אם נשלח warehouseId לא ריק → מאמתים ושומרים גם את השם
+  if (patch.warehouseId !== undefined) {
+    const wid = String(patch.warehouseId || "").trim();
+    if (!wid) {
+      patch.warehouseId = "";
+      patch.warehouseName = "";
+    } else {
+      const wh = await getWarehouseById(wid);
+      patch.warehouseId = wh.id;
+      patch.warehouseName = String(wh.name || "");
+    }
+  }
+
+  // תמיכה בעדכון לפי warehouseName (גם בלי לספק ID)
+  if (patch.warehouseName !== undefined && patch.warehouseId === undefined) {
+    const wname = String(patch.warehouseName || "").trim();
+    if (!wname) {
+      // שם ריק → הסרת שיוך
+      patch.warehouseId = "";
+      patch.warehouseName = "";
+    } else {
+      const wh = await getWarehouseByName(wname);
+      if (!wh) throw new Error("warehouseName לא קיים");
+      patch.warehouseId = wh.id;
+      patch.warehouseName = String(wh.name || "");
+    }
   }
 
   const docRef = productsCol.doc(String(id));
@@ -159,46 +236,35 @@ export async function deleteProduct(id) {
   await productsCol.doc(String(id)).delete();
 }
 
-// קיבוץ מוצרים לפי "מכולה" (מהשדה container אם קיים, אחרת מתוך description)
+/** קיבוץ לפי “מכולה” (נשען על תיאור או שדה container) */
 export async function getProductsGroupedByContainer() {
   const snapshot = await productsCol.get();
   const groups = {};
-
   snapshot.forEach((doc) => {
     const data = doc.data() || {};
     const desc = data.description || "";
-    const container =
-      (data.container && String(data.container).trim()) || extractContainer(desc);
-
+    const container = (data.container && String(data.container).trim()) || extractContainer(desc);
     if (!groups[container]) groups[container] = [];
     groups[container].push({ id: doc.id, _id: doc.id, ...data, container });
   });
-
-  // מיון פנימי לפי שם
   Object.keys(groups).forEach((k) => {
     groups[k].sort((a, b) =>
       String(a.name || "").localeCompare(String(b.name || ""), "he")
     );
   });
-
   return groups;
 }
 
-// מוצרים של מכולה ספציפית (תאימות קוד קיים)
 export async function getProductsByContainer(containerRaw) {
   const container = String(containerRaw || "").trim().toUpperCase();
   if (!container) return [];
   const all = await getAllProducts();
   return all
-    .map((p) => ({
-      ...p,
-      container: p.container || extractContainer(p.description || ""),
-    }))
-    .filter((p) => String(p.container || "").toUpperCase() === container);
+    .map((p) => ({ ...p, container: p.container || extractContainer(p.description || "") }))
+    .filter((p) => p.container.toUpperCase() === container);
 }
 
-/* =========================== CUSTOMERS =========================== */
-
+/* ================== CUSTOMERS ================== */
 const customersCol = db.collection("customers");
 
 export async function getAllCustomers() {
@@ -214,28 +280,13 @@ export async function getCustomerById(id) {
 }
 
 export async function addCustomer(data) {
-  const payload = {
-    name: String(data?.name || "").trim(),
-    phone: data?.phone ? String(data.phone).trim() : "",
-    notes: data?.notes ? String(data.notes).trim() : "",
-    createdAt: new Date(),
-  };
-  if (!payload.name) throw new Error("Customer name is required");
-  const docRef = await customersCol.add(payload);
-  return { id: docRef.id, _id: docRef.id, ...payload };
+  const docRef = await customersCol.add(data);
+  return { id: docRef.id, _id: docRef.id, ...data };
 }
 
 export async function updateCustomer(id, updates) {
   const docRef = customersCol.doc(String(id));
-  const patch = { ...updates };
-  if (patch.name != null) {
-    patch.name = String(patch.name).trim();
-    if (!patch.name) throw new Error("Invalid customer name");
-  }
-  if (patch.phone != null) patch.phone = String(patch.phone).trim();
-  if (patch.notes != null) patch.notes = String(patch.notes).trim();
-
-  await docRef.update(patch);
+  await docRef.update(updates);
   const updated = await docRef.get();
   return { id: updated.id, _id: updated.id, ...updated.data() };
 }
@@ -244,25 +295,12 @@ export async function deleteCustomer(id) {
   await customersCol.doc(String(id)).delete();
 }
 
-/* =========================== DELIVERIES =========================== */
-
+/* ================== DELIVERIES ================== */
 const deliveriesCol = db.collection("deliveries");
 
-/**
- * שליפה של כל הניפוקים, עם אפשרות סינון לוגי בצד השרת לפי productId.
- * הערה: Firestore לא תומך ב-query על תתי-שדות במערך של map (items[].product),
- * לכן הסינון מתבצע קצר בזיכרון אחרי שליפת כל המסמכים.
- */
-export async function getAllDeliveries(productId = null) {
+export async function getAllDeliveries() {
   const snapshot = await deliveriesCol.get();
-  const list = snapshot.docs.map((d) => ({ id: d.id, _id: d.id, ...d.data() }));
-
-  if (!productId) return list;
-
-  const pid = String(productId);
-  return list.filter((d) =>
-    Array.isArray(d.items) && d.items.some((i) => String(i.product) === pid)
-  );
+  return snapshot.docs.map((d) => ({ id: d.id, _id: d.id, ...d.data() }));
 }
 
 export async function getDeliveryById(id) {
@@ -273,7 +311,6 @@ export async function getDeliveryById(id) {
 }
 
 export async function addDelivery(data) {
-  // data = { customer, customerName?, deliveredTo, items, signature, date?, personalNumber?, issuedBy*? }
   const payload = { ...data };
   const docRef = await deliveriesCol.add(payload);
   return { id: docRef.id, _id: docRef.id, ...payload };
@@ -281,7 +318,7 @@ export async function addDelivery(data) {
 
 export async function updateDelivery(id, updates) {
   const docRef = deliveriesCol.doc(String(id));
-  await docRef.update({ ...updates });
+  await docRef.update(updates);
   const updated = await docRef.get();
   return { id: updated.id, _id: updated.id, ...updated.data() };
 }
