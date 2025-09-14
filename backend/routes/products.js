@@ -5,7 +5,6 @@ import {
   getProductsByWarehouse,
   getProductsByWarehouseName,
   getProductById,
-  getProductBySku,
   addProduct,
   updateProduct,
   deleteProduct,
@@ -97,27 +96,36 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// POST - הוספת מוצר חדש (אפשר בזוגות: warehouseId או warehouseName)
+// POST - הוספת/עדכון (UPSERT) מוצר לפי (SKU, מחסן)
 router.post("/", async (req, res) => {
   try {
-    const { name, sku, description = "", stock = 0, warehouseId = "", warehouseName = "" } = req.body;
+    const {
+      name,
+      sku,
+      description = "",
+      stock = 0,
+      warehouseId = "",
+      warehouseName = "",
+    } = req.body;
 
-    const newProduct = await addProduct({
-      name: String(name || "").trim(),
-      sku: String(sku || "").trim().toUpperCase(),
-      description: String(description).trim(),
-      stock: Number(stock),
-      warehouseId: String(warehouseId || "").trim(),
-      warehouseName: String(warehouseName || "").trim(),
+    const product = await addProduct({
+      name,
+      sku,
+      description,
+      stock,
+      warehouseId,
+      warehouseName,
     });
 
-    res.status(201).json(newProduct);
+    // אם בוצע upsert נחזיר 200 רגיל, אחרת 201
+    const status = product?._upsert ? 200 : 201;
+    res.status(status).json(product);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-// PUT - עדכון מוצר (כולל שינוי שיוך לפי שם/ID)
+// PUT - עדכון מוצר
 router.put("/:id", async (req, res) => {
   try {
     const id = req.params.id;
