@@ -5,6 +5,7 @@ import AddProduct from "./components/AddProduct";
 import IssueStock from "./components/IssueStock";
 import DeliveriesList from "./components/DeliveriesList";
 import ProductsByContainer from "./components/ProductsByContainer.jsx";
+import Warehouses from "./components/Warehouses"; // 👈 חדש
 
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import Login from "./components/Login";
@@ -73,6 +74,9 @@ function AppContent() {
         <button onClick={() => setScreen("deliveries")} style={{ padding: "8px 16px" }}>
           רשימת ניפוקים
         </button>
+        <button onClick={() => setScreen("warehouses")} style={{ padding: "8px 16px" }}>
+          מחסנים {/* 👈 חדש */}
+        </button>
       </nav>
 
       {/* המסכים */}
@@ -80,6 +84,7 @@ function AppContent() {
       {screen === "addProduct" && <AddProduct onAdd={() => setScreen("products")} />}
       {screen === "issue" && <IssueStock onIssued={() => setScreen("products")} />}
       {screen === "deliveries" && <DeliveriesList />}
+      {screen === "warehouses" && <Warehouses />}{/* 👈 חדש */}
     </div>
   );
 }
