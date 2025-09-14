@@ -6,7 +6,7 @@ import ProductHistory from "./ProductHistory";
 import {
   Box, Typography, TextField, IconButton, Button, Divider,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-  Stack, useMediaQuery, Tooltip, InputAdornment, FormControl, InputLabel, Select, MenuItem
+  Stack, useMediaQuery, Tooltip, InputAdornment, FormControl, Select, MenuItem
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import HistoryIcon from "@mui/icons-material/History";
@@ -18,11 +18,10 @@ export default function ProductsList() {
   const [products, setProducts] = useState([]);
   const [warehouses, setWarehouses] = useState([]); // רשימת מחסנים
   const [search, setSearch] = useState("");
-  const [selectedWarehouse, setSelectedWarehouse] = useState(""); // סינון לפי מחסן (נשלח לשרת)
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // ערך שינוי לכל מוצר (יכול להיות שלילי/חיובי)
+  // שינוי מלאי לכל מוצר
   const [deltas, setDeltas] = useState({}); // { [productId]: string }
   const [rowBusy, setRowBusy] = useState({}); // אינדיקציית טעינה לשורה
 
@@ -31,13 +30,11 @@ export default function ProductsList() {
 
   const pid = (p) => String(p._id || p.id);
 
-  // --- טעינת מוצרים (שרת מסנן לפי warehouseId) ---
+  // --- טעינת מוצרים (עם חיפוש) ---
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
-      const params = { search };
-      if (selectedWarehouse) params.warehouseId = selectedWarehouse;
-      const res = await api.get("/api/products", { params });
+      const res = await api.get("/api/products", { params: { search } });
       setProducts(res.data || []);
     } catch (err) {
       console.error(err);
@@ -45,7 +42,7 @@ export default function ProductsList() {
     } finally {
       setLoading(false);
     }
-  }, [search, selectedWarehouse]);
+  }, [search]);
 
   useEffect(() => {
     fetchProducts();
@@ -60,6 +57,7 @@ export default function ProductsList() {
         if (!mounted) return;
         setWarehouses(Array.isArray(res.data) ? res.data : []);
       } catch (e) {
+        console.error("GET /api/warehouses failed:", e?.response?.status, e?.response?.data || e?.message);
         if (!mounted) return;
         setWarehouses([]);
       }
@@ -127,7 +125,23 @@ export default function ProductsList() {
     }
   };
 
-  const noResults = !loading && products.length === 0;
+  // --- שינוי שיוך מחסן למוצר קיים ---
+  const handleChangeWarehouse = async (productId, newWarehouseId) => {
+    try {
+      setRowBusy((prev) => ({ ...prev, [productId]: true }));
+      // אם בוחרים "ללא שיוך" – שלח מחרוזת ריקה
+      const patch = { warehouseId: newWarehouseId ? String(newWarehouseId) : "" };
+      await api.put(`/api/products/${productId}`, patch);
+      await fetchProducts();
+    } catch (err) {
+      console.error(err);
+      alert("שגיאה בעדכון המחסן: " + (err?.response?.data?.error || err?.message));
+    } finally {
+      setRowBusy((prev) => ({ ...prev, [productId]: false }));
+    }
+  };
+
+  const noResults = useMemo(() => !loading && products.length === 0, [loading, products]);
 
   const StockAdjustControls = ({ id }) => {
     const value = deltas[id] ?? "";
@@ -163,9 +177,24 @@ export default function ProductsList() {
     );
   };
 
+  // קומפוננטת בחירת מחסן לכל שורה
+  const WarehouseSelectCell = ({ value, onChange, disabled }) => {
+    return (
+      <FormControl size="small" sx={{ minWidth: 160 }}>
+        <Select value={value || ""} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
+          <MenuItem value="">ללא שיוך</MenuItem>
+          {warehouses.map(w => (
+            <MenuItem key={w._id || w.id} value={String(w._id || w.id)}>
+              {w.name || "(ללא שם)"}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+    );
+  };
+
   return (
     <Box sx={{ direction: "rtl", textAlign: "right", p: 2 }}>
-      {/* כותרת + חיפוש + סינון לפי מחסן */}
       <Stack
         direction={{ xs: "column", sm: "row" }}
         spacing={2}
@@ -175,25 +204,6 @@ export default function ProductsList() {
         <Typography variant="h5" fontWeight="bold" sx={{ flex: 1 }}>
           רשימת מוצרים
         </Typography>
-
-        <FormControl size="small" sx={{ minWidth: 220 }}>
-          <InputLabel id="warehouse-filter-label">סנן לפי מחסן</InputLabel>
-          <Select
-            labelId="warehouse-filter-label"
-            value={selectedWarehouse}
-            label="סנן לפי מחסן"
-            onChange={(e) => setSelectedWarehouse(e.target.value)}
-            sx={{ direction: "rtl", textAlign: "right" }}
-          >
-            <MenuItem value="">כל המחסנים</MenuItem>
-            {warehouses.map((w) => (
-              <MenuItem key={w._id || w.id} value={String(w._id || w.id)}>
-                {w.name || "(ללא שם)"}{w.address ? ` — ${w.address}` : ""}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
         <TextField
           size="small"
           placeholder="חפש מוצר בשם או במקט..."
@@ -204,7 +214,7 @@ export default function ProductsList() {
         />
       </Stack>
 
-      {/* מובייל: כרטיסים; דסקטופ: טבלה */}
+      {/* מובייל: כרטיסים */}
       {isMobile ? (
         <Stack spacing={1}>
           {loading && <Typography>טוען...</Typography>}
@@ -234,9 +244,16 @@ export default function ProductsList() {
                     <Typography variant="body2">
                       כמות במלאי: <b>{busy ? "…" : p.stock}</b>
                     </Typography>
-                    <Typography variant="body2">
+
+                    {/* הצגת שם מחסן + שינוי מחסן במובייל */}
+                    <Typography variant="body2" sx={{ mt: 0.5 }}>
                       מחסן: <b>{getWhName(p.warehouseId)}</b>
                     </Typography>
+                    <WarehouseSelectCell
+                      value={p.warehouseId}
+                      onChange={(wid) => handleChangeWarehouse(id, wid)}
+                      disabled={busy}
+                    />
                   </Stack>
 
                   <Stack direction="row" spacing={1} alignItems="center">
@@ -268,15 +285,16 @@ export default function ProductsList() {
           })}
         </Stack>
       ) : (
+        // דסקטופ: טבלה
         <TableContainer component={Paper} elevation={2}>
           <Table>
             <TableHead>
               <TableRow>
                 <TableCell align="right" sx={{ width: "10%" }}>מקט</TableCell>
                 <TableCell align="right" sx={{ width: "18%" }}>שם</TableCell>
-                <TableCell align="right" sx={{ width: "28%" }}>תיאור</TableCell>
-                <TableCell align="right" sx={{ width: "10%" }}>כמות</TableCell>
-                <TableCell align="right" sx={{ width: "12%" }}>מחסן</TableCell>
+                <TableCell align="right" sx={{ width: "26%" }}>תיאור</TableCell>
+                <TableCell align="right" sx={{ width: "8%" }}>כמות</TableCell>
+                <TableCell align="right" sx={{ width: "16%" }}>מחסן</TableCell>
                 <TableCell align="right" sx={{ width: "22%" }}>שינוי מלאי (Δ)</TableCell>
               </TableRow>
             </TableHead>
@@ -286,7 +304,7 @@ export default function ProductsList() {
                   <TableCell colSpan={6} align="center">טוען...</TableCell>
                 </TableRow>
               )}
-              {!loading && products.length === 0 && (
+              {noResults && (
                 <TableRow>
                   <TableCell colSpan={6} align="center" sx={{ color: "text.secondary" }}>
                     לא נמצאו מוצרים
@@ -308,7 +326,19 @@ export default function ProductsList() {
                         {p.description}
                       </TableCell>
                       <TableCell align="right"><b>{busy ? "…" : p.stock}</b></TableCell>
-                      <TableCell align="right">{getWhName(p.warehouseId)}</TableCell>
+
+                      {/* מחסן: שם + בורר להחלפה */}
+                      <TableCell align="right">
+                        <Stack direction="row" spacing={1} alignItems="center" justifyContent="flex-end">
+                          <Typography variant="body2">{getWhName(p.warehouseId)}</Typography>
+                          <WarehouseSelectCell
+                            value={p.warehouseId}
+                            onChange={(wid) => handleChangeWarehouse(id, wid)}
+                            disabled={busy}
+                          />
+                        </Stack>
+                      </TableCell>
+
                       <TableCell align="right">
                         <Stack direction="row" spacing={1} justifyContent="flex-end" alignItems="center">
                           <StockAdjustControls id={id} />
