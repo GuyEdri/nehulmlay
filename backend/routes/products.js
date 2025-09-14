@@ -8,17 +8,18 @@ import {
   updateProduct,
   deleteProduct,
   updateProductStock,
-  // חדשים:
+  // חדשים/קיימים:
   getProductsGroupedByContainer,
   getProductsByContainer,
+  getProductsByWarehouse,
 } from "../firestoreService.js";
 
 const router = express.Router();
 
-// GET - כל המוצרים / חיפוש / קיבוץ לפי מכולה / פילטר לפי מכולה
+// GET - כל המוצרים / חיפוש / קיבוץ לפי מכולה / פילטר לפי מכולה / **פילטר לפי מחסן**
 router.get("/", async (req, res) => {
   try {
-    const { search = "", groupBy = "", container = "" } = req.query;
+    const { search = "", groupBy = "", container = "", warehouseId = "" } = req.query;
 
     // 1) קיבוץ לפי מכולה
     if (String(groupBy).toLowerCase() === "container") {
@@ -26,10 +27,9 @@ router.get("/", async (req, res) => {
       return res.json({ groupedBy: "container", groups: grouped });
     }
 
-    // 2) פילטר לפי מכולה ספציפית (נוח ל־UI עם dropdown)
+    // 2) פילטר לפי מכולה (תאימות לקוד קודם)
     if (container) {
       const items = await getProductsByContainer(container);
-      // אפשר עדיין ליישם חיפוש מעל התוצאה המסוננת
       const term = String(search).trim();
       let filtered = items;
       if (term) {
@@ -44,7 +44,23 @@ router.get("/", async (req, res) => {
       return res.json(filtered);
     }
 
-    // 3) ברירת מחדל: כל המוצרים עם חיפוש אופציונלי בשם/מקט
+    // 3) **פילטר לפי מחסן** (צד שרת)
+    if (warehouseId) {
+      let items = await getProductsByWarehouse(warehouseId);
+      const term = String(search).trim();
+      if (term) {
+        const up = term.toUpperCase();
+        const low = term.toLowerCase();
+        items = items.filter((p) => {
+          const name = String(p.name || "");
+          const sku = String(p.sku || "");
+          return name.toLowerCase().includes(low) || sku.toUpperCase().includes(up);
+        });
+      }
+      return res.json(items);
+    }
+
+    // 4) ברירת מחדל: כל המוצרים עם חיפוש אופציונלי
     let products = await getAllProducts();
     const term = String(search).trim();
     if (term) {
@@ -74,21 +90,15 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// POST - הוספת מוצר חדש (עם SKU ייחודי) + שיוך למחסן (אופציונלי)
+// POST - הוספת מוצר חדש (עם SKU ייחודי + warehouseId אופציונלי)
 router.post("/", async (req, res) => {
   try {
-    const {
-      name,
-      sku,
-      description = "",
-      stock = 0,
-      warehouseId = "", // 👈 חדש: מזהה מחסן אופציונלי
-    } = req.body;
+    const { name, sku, description = "", stock = 0, warehouseId = "" } = req.body;
 
     const cleanName = String(name || "").trim();
     const cleanSku = String(sku || "").trim().toUpperCase();
+    const cleanWarehouseId = String(warehouseId || "").trim(); // "" = ללא שיוך
     const qty = Number(stock);
-    const cleanWarehouseId = String(warehouseId || "").trim();
 
     if (!cleanName) {
       return res.status(400).json({ error: "שם מוצר חייב להיות מחרוזת תקינה" });
@@ -117,8 +127,8 @@ router.post("/", async (req, res) => {
       sku: cleanSku,
       description: String(description).trim(),
       stock: qty,
+      warehouseId: cleanWarehouseId, // 👈 נשמר ב־Firestore
       createdAt: new Date(),
-      ...(cleanWarehouseId ? { warehouseId: cleanWarehouseId } : {}), // 👈 יישמר בשדה המוצר
     });
 
     res.status(201).json(newProduct);
@@ -127,7 +137,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-// PUT - עדכון מוצר (כולל שינוי SKU עם בדיקת ייחודיות + עדכון מחסן)
+// PUT - עדכון מוצר (כולל אפשרות לשנות SKU/warehouseId)
 router.put("/:id", async (req, res) => {
   try {
     const id = req.params.id;
@@ -141,8 +151,6 @@ router.put("/:id", async (req, res) => {
     if (updates.sku != null) {
       const newSku = String(updates.sku).trim().toUpperCase();
       if (!newSku) return res.status(400).json({ error: "מקט (SKU) לא תקין" });
-
-      // ודא ייחודיות מק״ט מול מוצרים אחרים
       const bySku = await getProductBySku(newSku);
       if (bySku && String(bySku.id) !== String(id)) {
         return res.status(400).json({ error: "מקט כבר קיים" });
@@ -158,9 +166,8 @@ router.put("/:id", async (req, res) => {
       updates.stock = s;
     }
 
-    // 👇 לאכוף טיפוס נכון לשדה המחסן (אופציונלי)
     if (updates.warehouseId != null) {
-      updates.warehouseId = String(updates.warehouseId || "").trim();
+      updates.warehouseId = String(updates.warehouseId).trim() || "";
     }
 
     const updatedProduct = await updateProduct(id, updates);

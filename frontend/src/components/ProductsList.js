@@ -6,7 +6,7 @@ import ProductHistory from "./ProductHistory";
 import {
   Box, Typography, TextField, IconButton, Button, Divider,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-  Stack, useMediaQuery, Tooltip, InputAdornment
+  Stack, useMediaQuery, Tooltip, InputAdornment, FormControl, InputLabel, Select, MenuItem
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import HistoryIcon from "@mui/icons-material/History";
@@ -16,8 +16,9 @@ import { useTheme } from "@mui/material/styles";
 
 export default function ProductsList() {
   const [products, setProducts] = useState([]);
-  const [warehouses, setWarehouses] = useState([]); // 👈 חדש: רשימת מחסנים
+  const [warehouses, setWarehouses] = useState([]); // רשימת מחסנים
   const [search, setSearch] = useState("");
+  const [selectedWarehouse, setSelectedWarehouse] = useState(""); // סינון לפי מחסן (נשלח לשרת)
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -30,11 +31,13 @@ export default function ProductsList() {
 
   const pid = (p) => String(p._id || p.id);
 
-  // --- טעינת מוצרים (עם חיפוש) ---
+  // --- טעינת מוצרים (שרת מסנן לפי warehouseId) ---
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await api.get("/api/products", { params: { search } });
+      const params = { search };
+      if (selectedWarehouse) params.warehouseId = selectedWarehouse;
+      const res = await api.get("/api/products", { params });
       setProducts(res.data || []);
     } catch (err) {
       console.error(err);
@@ -42,7 +45,7 @@ export default function ProductsList() {
     } finally {
       setLoading(false);
     }
-  }, [search]);
+  }, [search, selectedWarehouse]);
 
   useEffect(() => {
     fetchProducts();
@@ -113,10 +116,9 @@ export default function ProductsList() {
 
     try {
       setRowBusy((prev) => ({ ...prev, [productId]: true }));
-      // שימוש בראוט הקיים: PUT /api/products/:id/stock  עם { diff }
       await api.put(`/api/products/${productId}/stock`, { diff: deltaNum });
-      setDelta(productId, "");   // איפוס השדה אחרי הצלחה
-      await fetchProducts();     // רענון הנתונים
+      setDelta(productId, "");
+      await fetchProducts();
     } catch (err) {
       console.error(err);
       alert("שגיאה בעדכון מלאי: " + (err?.response?.data?.error || err?.message));
@@ -125,7 +127,7 @@ export default function ProductsList() {
     }
   };
 
-  const noResults = useMemo(() => !loading && products.length === 0, [loading, products]);
+  const noResults = !loading && products.length === 0;
 
   const StockAdjustControls = ({ id }) => {
     const value = deltas[id] ?? "";
@@ -163,6 +165,7 @@ export default function ProductsList() {
 
   return (
     <Box sx={{ direction: "rtl", textAlign: "right", p: 2 }}>
+      {/* כותרת + חיפוש + סינון לפי מחסן */}
       <Stack
         direction={{ xs: "column", sm: "row" }}
         spacing={2}
@@ -172,6 +175,25 @@ export default function ProductsList() {
         <Typography variant="h5" fontWeight="bold" sx={{ flex: 1 }}>
           רשימת מוצרים
         </Typography>
+
+        <FormControl size="small" sx={{ minWidth: 220 }}>
+          <InputLabel id="warehouse-filter-label">סנן לפי מחסן</InputLabel>
+          <Select
+            labelId="warehouse-filter-label"
+            value={selectedWarehouse}
+            label="סנן לפי מחסן"
+            onChange={(e) => setSelectedWarehouse(e.target.value)}
+            sx={{ direction: "rtl", textAlign: "right" }}
+          >
+            <MenuItem value="">כל המחסנים</MenuItem>
+            {warehouses.map((w) => (
+              <MenuItem key={w._id || w.id} value={String(w._id || w.id)}>
+                {w.name || "(ללא שם)"}{w.address ? ` — ${w.address}` : ""}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
         <TextField
           size="small"
           placeholder="חפש מוצר בשם או במקט..."
@@ -212,7 +234,6 @@ export default function ProductsList() {
                     <Typography variant="body2">
                       כמות במלאי: <b>{busy ? "…" : p.stock}</b>
                     </Typography>
-                    {/* 👇 חדש: הצגת שם מחסן במובייל */}
                     <Typography variant="body2">
                       מחסן: <b>{getWhName(p.warehouseId)}</b>
                     </Typography>
@@ -255,7 +276,7 @@ export default function ProductsList() {
                 <TableCell align="right" sx={{ width: "18%" }}>שם</TableCell>
                 <TableCell align="right" sx={{ width: "28%" }}>תיאור</TableCell>
                 <TableCell align="right" sx={{ width: "10%" }}>כמות</TableCell>
-                <TableCell align="right" sx={{ width: "12%" }}>מחסן</TableCell> {/* 👈 חדש */}
+                <TableCell align="right" sx={{ width: "12%" }}>מחסן</TableCell>
                 <TableCell align="right" sx={{ width: "22%" }}>שינוי מלאי (Δ)</TableCell>
               </TableRow>
             </TableHead>
@@ -265,7 +286,7 @@ export default function ProductsList() {
                   <TableCell colSpan={6} align="center">טוען...</TableCell>
                 </TableRow>
               )}
-              {noResults && (
+              {!loading && products.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} align="center" sx={{ color: "text.secondary" }}>
                     לא נמצאו מוצרים
@@ -287,7 +308,6 @@ export default function ProductsList() {
                         {p.description}
                       </TableCell>
                       <TableCell align="right"><b>{busy ? "…" : p.stock}</b></TableCell>
-                      {/* 👇 חדש: שם מחסן */}
                       <TableCell align="right">{getWhName(p.warehouseId)}</TableCell>
                       <TableCell align="right">
                         <Stack direction="row" spacing={1} justifyContent="flex-end" alignItems="center">
