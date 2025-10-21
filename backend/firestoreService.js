@@ -116,12 +116,10 @@ export async function getProductsByWarehouseName(warehouseNameRaw) {
 export async function getProductsByWarehouseFlexible(inputRaw) {
   const val = String(inputRaw || "").trim();
   if (!val) return [];
-  // נסה למצוא מחסן לפי מזהה
   try {
     const wh = await getWarehouseById(val);
     return await getProductsByWarehouse(wh.id);
   } catch {
-    // אם לא מזהה, ננסה לפי שם
     return await getProductsByWarehouseName(val);
   }
 }
@@ -154,10 +152,7 @@ async function getProductBySkuAndWarehouse(sku, warehouseId) {
   return { id: d.id, _id: d.id, ...d.data() };
 }
 
-/** UPSERT לפי (SKU, מחסן):
- * אם קיים מוצר עם אותו SKU באותו מחסן → עדכון מלאי + עדכון שם/תיאור (אם נמסרו)
- * אחרת → יצירת מסמך חדש.
- */
+/** UPSERT לפי (SKU, מחסן) */
 export async function addProduct(data) {
   const name = String(data?.name || "").trim();
   const sku = String(data?.sku || "").trim().toUpperCase();
@@ -309,10 +304,6 @@ export async function getProductsByContainer(containerRaw) {
 }
 
 /* ================== קיבוצים/שליפות לפי "מחסן" ================== */
-
-/** קיבוץ לפי מחסן: מחזיר { [<warehouseName or "ללא מחסן">]: Product[] }
- *  שומר גם warehouseId בכל פריט, כדי שתוכל לקשר ב־UI.
- */
 export async function getProductsGroupedByWarehouse() {
   const snapshot = await productsCol.get();
   const groups = {};
@@ -337,7 +328,6 @@ export async function getProductsGroupedByWarehouse() {
   return groups;
 }
 
-/** רשימת שמות מחסנים על בסיס מוצרים בפועל (distinct) */
 export async function getDistinctWarehousesFromProducts() {
   const all = await getAllProducts();
   const set = new Set(
@@ -407,5 +397,37 @@ export async function updateDelivery(id, updates) {
 
 export async function deleteDelivery(id) {
   await deliveriesCol.doc(String(id)).delete();
+}
+
+/* ================== RETURNS (זיכויים) ================== */
+const returnsCol = db.collection("returns");
+
+export async function getAllReturns() {
+  const snapshot = await returnsCol.get();
+  return snapshot.docs.map((d) => ({ id: d.id, _id: d.id, ...d.data() }));
+}
+
+export async function getReturnById(id) {
+  const docRef = returnsCol.doc(String(id));
+  const docSnap = await docRef.get();
+  if (!docSnap.exists) throw new Error("Return not found");
+  return { id: docSnap.id, _id: docSnap.id, ...docSnap.data() };
+}
+
+export async function addReturn(data) {
+  const payload = { ...data };
+  const docRef = await returnsCol.add(payload);
+  return { id: docRef.id, _id: docRef.id, ...payload };
+}
+
+export async function updateReturn(id, updates) {
+  const docRef = returnsCol.doc(String(id));
+  await docRef.update(updates);
+  const updated = await docRef.get();
+  return { id: updated.id, _id: updated.id, ...updated.data() };
+}
+
+export async function deleteReturn(id) {
+  await returnsCol.doc(String(id)).delete();
 }
 

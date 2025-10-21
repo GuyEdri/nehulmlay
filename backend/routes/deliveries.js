@@ -12,7 +12,6 @@ import {
   getCustomerById,
   getProductById,
   updateProductStock,
-  // נדרש לשם המחסן
   getWarehouseById,
 } from "../firestoreService.js";
 
@@ -50,7 +49,7 @@ async function resolveWarehouseNameById(wid) {
   }
 }
 
-/* ------- עזר: העשרת items בשם מחסן אם חסר (ל-GETים) ------- */
+/* ------- עזר: העשרת items בשם מחסן אם חסר ------- */
 async function hydrateItemsWithWarehouseName(items = []) {
   return Promise.all(
     (items || []).map(async (it) => {
@@ -105,8 +104,6 @@ router.get("/:id", async (req, res) => {
  * ======================================= */
 
 // POST /api/deliveries
-// תומך ב־warehouseId: יוודא שכל המוצרים בניפוק שייכים למחסן זה ושהמלאי מספיק — ואז יפחית מהמלאי.
-// נשמור גם warehouseName (ברמת הניפוק וברמת כל item).
 router.post("/", async (req, res) => {
   try {
     const {
@@ -127,7 +124,7 @@ router.post("/", async (req, res) => {
     const cleanWarehouseId = String(warehouseId || "").trim();
     const resolvedWarehouseName = await resolveWarehouseNameById(cleanWarehouseId);
 
-    // וולידציה: מוצרים קיימים, כמות חוקית, ואם נבחר מחסן — המוצר שייך אליו, וגם יש מלאי מספיק
+    // ולידציה: קיום מוצרים, מחסן (אם נבחר), ומלאי מספיק
     for (const row of items) {
       if (!row?.product) return res.status(400).json({ error: "חסר מזהה מוצר בשורה" });
       const qty = Number(row.quantity);
@@ -150,17 +147,17 @@ router.post("/", async (req, res) => {
       }
     }
 
-    // עדכון מלאי בפועל (הפחתה)
+    // הפחתת מלאי
     for (const row of items) {
       await updateProductStock(String(row.product), -Number(row.quantity));
     }
 
-    // מי ניפק? (דורש verifyAuth ב-server.js עבור /api/deliveries)
+    // מי ניפק? (אם יש אימות)
     const issuedByUid = req.user?.uid || null;
     const issuedByEmail = req.user?.email || null;
     const issuedByName = req.user?.name || req.user?.displayName || null;
 
-    // בניית items עם השלמת שם מחסן באופן אסינכרוני
+    // בניית items עם שם מחסן (אם יש)
     const cleanItems = await Promise.all(
       items.map(async (i) => {
         const wid = cleanWarehouseId || String(i.warehouseId || "").trim();
@@ -178,8 +175,8 @@ router.post("/", async (req, res) => {
     );
 
     const deliveryData = {
-      warehouseId: cleanWarehouseId,
-      warehouseName: resolvedWarehouseName || "",
+      warehouseId: cleanWarehouseId,                   // נשמר ברמת הניפוק
+      warehouseName: resolvedWarehouseName || "",      // ושם המחסן לנוחות
       customer: String(customer),
       customerName: String(customerName),
       deliveredTo: String(deliveredTo),
@@ -211,7 +208,7 @@ router.post("/:id/receipt", async (req, res) => {
     if (!delivery) return res.status(404).json({ error: "לא נמצא ניפוק" });
     if (!signature) signature = delivery.signature;
 
-    // שם לקוח (אם יש רק מזהה — ננסה להביא)
+    // שם לקוח (fallback)
     let customerName = delivery.customerName || "";
     if (!customerName && delivery.customer) {
       try {
@@ -222,14 +219,14 @@ router.post("/:id/receipt", async (req, res) => {
       }
     }
 
-    // שם מחסן להצגה (עדיפות לשם שנשמר, אחרת נביא לפי ID; ולבסוף fallback ל-ID)
+    // שם מחסן
     const wid = String(delivery.warehouseId || "").trim();
     let wname = String(delivery.warehouseName || "").trim();
     if (wid && !wname) {
       wname = await resolveWarehouseNameById(wid);
     }
 
-    // פרטי מוצרים: name, sku, quantity
+    // פרטי מוצרים
     let products = [];
     try {
       products = await Promise.all(
@@ -250,7 +247,7 @@ router.post("/:id/receipt", async (req, res) => {
       products = [];
     }
 
-    // כותרות תשובה לפני הזרמה
+    // כותרות תשובה
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
@@ -258,27 +255,21 @@ router.post("/:id/receipt", async (req, res) => {
     );
 
     const doc = new PDFDocument({ size: "A4", margin: 40 });
-
-    // טיפול בשגיאת stream
     doc.on("error", (e) => {
       if (!res.headersSent) res.status(500);
       try { res.end(); } catch {}
       console.error("PDF stream error:", e);
     });
-
-    // הזרמה ישירה ל־response
     doc.pipe(res);
 
-    // ניסיון להטעין פונט עברית (אופציונלי)
+    // פונט עברית (אופציונלי)
     try {
       const fontPath = path.resolve(__dirname, "../fonts/noto.ttf");
       doc.registerFont("hebrew", fontPath);
       doc.font("hebrew");
-    } catch {
-      // אם אין פונט — ממשיכים עם ברירת מחדל
-    }
+    } catch {}
 
-    // עזרי RTL
+    // RTL helpers
     const rtlText = (text, options = {}) => {
       const rtlMark = "\u200F";
       const str = (text ?? "").toString().replace(/\s+/g, " ").trim();
@@ -310,10 +301,7 @@ router.post("/:id/receipt", async (req, res) => {
     const byStr = delivery.issuedByName || delivery.issuedByEmail || delivery.issuedByUid || "";
     if (byStr) rtlText(`נופק\u00A0על\u00A0ידי: ${byStr}`);
     if (delivery.personalNumber) rtlText(`מספר\u00A0אישי: ${delivery.personalNumber}`);
-
-    if (wname || wid) {
-      rtlText(`מחסן\u00A0מקור: ${wname || wid}`);
-    }
+    if (wname || wid) rtlText(`מחסן\u00A0מקור: ${wname || wid}`);
 
     const d = normalizeDate(delivery.date);
     const dateText = d
@@ -330,7 +318,7 @@ router.post("/:id/receipt", async (req, res) => {
 
     doc.moveDown(1);
 
-    // ----- טבלת מוצרים: [מקט | שם מוצר | כמות] -----
+    // טבלת מוצרים
     const qtyW = 70;
     const skuW = 120;
     const nameW = Math.max(120, contentWidth - qtyW - skuW);
@@ -389,7 +377,6 @@ router.post("/:id/receipt", async (req, res) => {
     }
 
     y += 8;
-    doc.moveTo(left, y);
     doc.moveDown(2);
 
     doc.fontSize(14);
@@ -412,7 +399,6 @@ router.post("/:id/receipt", async (req, res) => {
       doc.moveDown(2);
     }
 
-    // סגירה והזרמה
     doc.end();
   } catch (err) {
     console.error("Error generating PDF receipt:", err);
@@ -429,7 +415,6 @@ router.post("/:id/receipt", async (req, res) => {
  * ======================================= */
 
 // PUT /api/deliveries/:id
-// אם payload.items נשלח — נשלים warehouseName לפריטים; נשלים גם שם מחסן לניפוק אם נשלח warehouseId.
 router.put("/:id", async (req, res) => {
   try {
     const updates = { ...(req.body || {}) };
