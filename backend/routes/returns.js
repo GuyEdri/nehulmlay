@@ -63,6 +63,7 @@ async function hydrateItemsWithWarehouseName(items = []) {
  *          GETs
  * ========================= */
 
+// GET /api/returns
 router.get("/", async (_req, res) => {
   try {
     const rows = await getAllReturns();
@@ -80,6 +81,7 @@ router.get("/", async (_req, res) => {
   }
 });
 
+// GET /api/returns/:id
 router.get("/:id", async (req, res) => {
   try {
     const r = await getReturnById(req.params.id);
@@ -100,15 +102,15 @@ router.get("/:id", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const {
-      warehouseId = "",      // מחסן יעד (מומלץ)
+      warehouseId = "",      // מחסן יעד (רשות)
       customer,
       customerName,
       returnedBy,            // מי החזיר
       items,                 // [{ product, quantity, (optional) warehouseId/Name }]
-      signature,             // dataURL, רשות
+      signature,             // dataURL (רשות)
       date,
-      personalNumber,
-      notes = "",
+      personalNumber,        // רשות
+      notes = "",            // הערות
     } = req.body || {};
 
     if (!customer || !customerName || !returnedBy || !Array.isArray(items) || items.length === 0) {
@@ -118,7 +120,7 @@ router.post("/", async (req, res) => {
     const cleanWarehouseId = String(warehouseId || "").trim();
     const resolvedWarehouseName = await resolveWarehouseNameById(cleanWarehouseId);
 
-    // ולידציה בסיסית: קיום מוצרים + כמות חיובית
+    // ולידציה בסיסית: מוצר קיים + כמות חיובית
     for (const row of items) {
       if (!row?.product) return res.status(400).json({ error: "חסר מזהה מוצר בשורה" });
       const qty = Number(row.quantity);
@@ -127,19 +129,20 @@ router.post("/", async (req, res) => {
       }
       const prod = await getProductById(String(row.product));
       if (!prod) return res.status(400).json({ error: `מוצר לא נמצא: ${String(row.product)}` });
+      // בזיכוי אין צורך לבדוק התאמת מחסן מקור — אנחנו מחזירים למחסן יעד שנבחר עכשיו.
     }
 
-    // העלאת מלאי בפועל (+quantity)
+    // העלאת מלאי בפועל
     for (const row of items) {
       await updateProductStock(String(row.product), +Number(row.quantity));
     }
 
-    // מי רשם זיכוי (אם יש אימות)
+    // מי רשם זיכוי (מה־auth אם יש)
     const createdByUid = req.user?.uid || null;
     const createdByEmail = req.user?.email || null;
     const createdByName = req.user?.name || req.user?.displayName || null;
 
-    // בניית items עם שם מחסן יעד
+    // items עשירים בשם מחסן
     const cleanItems = await Promise.all(
       items.map(async (i) => {
         const wid = cleanWarehouseId || String(i.warehouseId || "").trim();
@@ -183,6 +186,7 @@ router.post("/", async (req, res) => {
  *      PDF “אישור זיכוי”
  * ========================= */
 
+// POST /api/returns/:id/receipt
 router.post("/:id/receipt", async (req, res) => {
   try {
     let signature = req.body?.signature;
@@ -190,7 +194,7 @@ router.post("/:id/receipt", async (req, res) => {
     if (!data) return res.status(404).json({ error: "לא נמצא זיכוי" });
     if (!signature) signature = data.signature;
 
-    // שם לקוח (fallback)
+    // שם לקוח (fallback לפי מזהה)
     let customerName = data.customerName || "";
     if (!customerName && data.customer) {
       try {
@@ -205,39 +209,28 @@ router.post("/:id/receipt", async (req, res) => {
     const wid = String(data.warehouseId || "").trim();
     let wname = String(data.warehouseName || "").trim();
     if (wid && !wname) {
-      try {
-        const wh = await getWarehouseById(wid);
-        wname = String(wh?.name || "");
-      } catch {}
+      wname = await resolveWarehouseNameById(wid);
     }
 
-    // פרטי מוצרים
-    let products = [];
-    try {
-      products = await Promise.all(
-        (data.items || []).map(async (item) => {
-          try {
-            const prod = await getProductById(item.product);
-            return {
-              name: prod?.name || "מוצר לא ידוע",
-              sku: prod?.sku || "",
-              quantity: item.quantity,
-            };
-          } catch {
-            return { name: "מוצר לא ידוע", sku: "", quantity: item.quantity };
-          }
-        })
-      );
-    } catch {
-      products = [];
-    }
+    // פרטי מוצרים: name, sku, quantity
+    const products = await Promise.all(
+      (data.items || []).map(async (item) => {
+        try {
+          const prod = await getProductById(item.product);
+          return {
+            name: prod?.name || "מוצר לא ידוע",
+            sku: prod?.sku || "",
+            quantity: item.quantity,
+          };
+        } catch {
+          return { name: "מוצר לא ידוע", sku: "", quantity: item.quantity };
+        }
+      })
+    );
 
     // כותרות תשובה
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename=return_${req.params.id}.pdf`
-    );
+    res.setHeader("Content-Disposition", `attachment; filename=return_${req.params.id}.pdf`);
 
     const doc = new PDFDocument({ size: "A4", margin: 40 });
     doc.on("error", (e) => {
@@ -334,4 +327,108 @@ router.post("/:id/receipt", async (req, res) => {
 
     const drawRow = (row) => {
       if (y + rowH > pageHeight - bottom) {
+        doc.addPage();
+        y = top;
+        drawHeader();
+      }
+
+      doc.lineWidth(0.3).strokeColor("#ccc")
+        .rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH).stroke();
+
+      doc.fontSize(12).fillColor("#000");
+      doc.text(String(row.quantity ?? ""), tableRightX - qtyW, y + 6, { width: qtyW - 6, align: "right" });
+      rtlTextAt(String(row.name ?? ""), tableRightX - qtyW, y + 6, nameW - 6);
+      doc.text(String(row.sku || "—"), tableRightX - (qtyW + nameW + skuW) + 6, y + 6, {
+        width: skuW - 6,
+        align: "right",
+      });
+
+      y += rowH;
+    };
+
+    drawHeader();
+    if (!Array.isArray(products) || products.length === 0) {
+      doc.lineWidth(0.3).strokeColor("#ccc")
+        .rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH).stroke();
+      rtlTextAt("אין פריטים", tableRightX - qtyW, y + 6, nameW - 6);
+      y += rowH;
+    } else {
+      products.forEach(drawRow);
+    }
+
+    y += 8;
+    doc.moveDown(2);
+
+    doc.fontSize(14);
+    rtlText("חתימה של המַחזיר:");
+    if (signature && typeof signature === "string" && signature.startsWith("data:image")) {
+      try {
+        const b64 = signature.replace(/^data:image\/\w+;base64,/, "");
+        const sigBuffer = Buffer.from(b64, "base64");
+        const imgWidth = 160;
+        const x = pageWidth - right - imgWidth;
+        const yImg = doc.y + 6;
+        doc.image(sigBuffer, x, yImg, { width: imgWidth });
+        doc.moveDown(4);
+      } catch {
+        rtlText("— שגיאה בקריאת החתימה —");
+        doc.moveDown(2);
+      }
+    } else {
+      rtlText("__________________");
+      doc.moveDown(2);
+    }
+
+    doc.end();
+  } catch (err) {
+    console.error("Error generating Return PDF:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    } else {
+      try { res.end(); } catch {}
+    }
+  }
+});
+
+/* =========================
+ *     PUT / DELETE
+ * ========================= */
+
+router.put("/:id", async (req, res) => {
+  try {
+    const updates = { ...(req.body || {}) };
+
+    if (updates.warehouseId !== undefined) {
+      const wid = String(updates.warehouseId || "").trim();
+      updates.warehouseId = wid;
+      updates.warehouseName = updates.warehouseName ?? (await resolveWarehouseNameById(wid));
+    }
+
+    if (Array.isArray(updates.items)) {
+      updates.items = await Promise.all(
+        updates.items.map(async (i) => {
+          const wid = String(i?.warehouseId || updates.warehouseId || "").trim();
+          const wname = String(i?.warehouseName || "").trim() || (await resolveWarehouseNameById(wid));
+          return { ...i, warehouseId: wid, warehouseName: wname };
+        })
+      );
+    }
+
+    const updated = await updateReturn(req.params.id, updates);
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete("/:id", async (req, res) => {
+  try {
+    await deleteReturn(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+export default router;
 
