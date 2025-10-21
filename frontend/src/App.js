@@ -7,7 +7,7 @@ import DeliveriesList from "./components/DeliveriesList";
 import ProductsByContainer from "./components/ProductsByContainer.jsx";
 import Warehouses from "./components/Warehouses"; // 👈 חדש
 import AddReturn from "./components/AddReturn";    // 👈 חדש: טופס זיכוי
-
+import ReturnsList from "./components/ReturnsList";
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import Login from "./components/Login";
 import { Button, Stack, Typography, Box } from "@mui/material";
@@ -76,6 +76,9 @@ function AppContent() {
           זיכוי מלאי {/* 👈 חדש */}
         </button>
         <button onClick={() => setScreen("deliveries")} style={{ padding: "8px 16px" }}>
+	<button onClick={() => setScreen("returns")} style={{ padding: "8px 16px" }}>
+	  רשימת זיכויים
+	</button>
           רשימת ניפוקים
         </button>
         <button onClick={() => setScreen("warehouses")} style={{ padding: "8px 16px" }}>
@@ -89,6 +92,7 @@ function AppContent() {
       {screen === "issue" && <IssueStock onIssued={() => setScreen("products")} />}
       {screen === "return" && <AddReturn onCreated={() => setScreen("products")} />}{/* 👈 חדש */}
       {screen === "deliveries" && <DeliveriesList />}
+      {screen === "returns" && <ReturnsList />}
       {screen === "warehouses" && <Warehouses />}
     </div>
   );
