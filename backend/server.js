@@ -20,11 +20,11 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// אם אתה מאחורי פרוקסי (Render/Heroku) – זה עוזר ל-X-Forwarded-For/Proto
+// אם אתה מאחורי פרוקסי (Render/Heroku)
 app.set("trust proxy", 1);
 
 // ----- Middleware -----
-app.use(express.json({ limit: "10mb" })); // מעט הגדלה כי PDF/חתימות עלולות להיות גדולות
+app.use(express.json({ limit: "10mb" })); // חתימות/PDF
 
 // CORS whitelist
 const defaultWhitelist = [
@@ -41,7 +41,7 @@ const whitelist = [...envWhitelist, ...defaultWhitelist];
 
 const corsMiddleware = cors({
   origin(origin, cb) {
-    if (!origin) return cb(null, true); // מאפשר לכלי CLI/בריאות
+    if (!origin) return cb(null, true); // מאפשר לכלי CLI/health
     const ok = whitelist.some((rule) =>
       typeof rule === "string" ? rule === origin : rule.test(origin)
     );
@@ -53,15 +53,18 @@ const corsMiddleware = cors({
 
 app.use(corsMiddleware);
 
-// סטטי (אופציונלי) — לדוגמה לפונטים של PDF או לוגו
+// סטטי (אופציונלי) — לפונטים/לוגו PDF
 app.use("/static", express.static(path.resolve(__dirname, "public")));
 
 // ----- Public routes -----
 app.get("/healthz", (req, res) => res.status(200).json({ ok: true }));
 app.get("/", (req, res) => res.status(200).send("UGDA98 backend is up"));
 
+// 👇 חשוב: להתיר Preflight לפני האימות
+app.options("/api/*", corsMiddleware); // ← הוסף שורה זו
+
 // ----- Auth guard -----
-// כל נתיב תחת /api יחייב אימות (verifyAuth צריך לשים req.user כשצריך)
+// כל נתיב תחת /api יחייב אימות (verifyAuth שם req.user)
 app.use("/api", verifyAuth);
 
 // ----- Protected API routes -----
@@ -69,7 +72,7 @@ app.use("/api/customers", customersRouter);
 app.use("/api/products", productsRouter);
 app.use("/api/deliveries", deliveriesRouter);
 app.use("/api/warehouses", warehousesRouter);
-app.use("/api/returns", returnsRouter); // ← חדש
+app.use("/api/returns", returnsRouter);
 
 // 404 לנתיבי API
 app.use((req, res, next) => {
