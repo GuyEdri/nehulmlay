@@ -316,7 +316,7 @@ export default function IssueStock({ onIssued }) {
             </Button>
 
             {/* חתימה */}
-            <Box sx={{ textAlign: "right" }}>
+            <Box style={{ textAlign: "right" }}>
               <Typography mb={1}>חתימה דיגיטלית (חובה)</Typography>
               <SimpleSignaturePad onEnd={setSignature} />
             </Box>
