@@ -16,22 +16,20 @@ import { useTheme } from "@mui/material/styles";
 
 export default function ProductsList() {
   const [products, setProducts] = useState([]);
-  const [warehouses, setWarehouses] = useState([]);       // למחסנים
-  const [selectedWarehouse, setSelectedWarehouse] = useState(""); // ""=הכול
+  const [warehouses, setWarehouses] = useState([]);
+  const [selectedWarehouse, setSelectedWarehouse] = useState("");
   const [search, setSearch] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // שינוי מלאי לכל מוצר
-  const [deltas, setDeltas] = useState({}); // { [productId]: string }
-  const [rowBusy, setRowBusy] = useState({}); // אינדיקציית טעינה לשורה
+  const [deltas, setDeltas] = useState({});
+  const [rowBusy, setRowBusy] = useState({});
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const pid = (p) => String(p._id || p.id);
 
-  // טען מחסנים פעם אחת
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -48,7 +46,6 @@ export default function ProductsList() {
     return () => { mounted = false; };
   }, []);
 
-  // מפה ID→שם
   const whMap = useMemo(() => {
     const m = new Map();
     (warehouses || []).forEach(w => {
@@ -64,13 +61,12 @@ export default function ProductsList() {
     return whMap.get(key) || key;
   };
 
-  // --- טעינת מוצרים עם סינון-שרת לפי מחסן + חיפוש ---
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
       const params = {};
-      if (selectedWarehouse) params.warehouse = selectedWarehouse; // סינון שרת
-      if (search) params.search = search;                           // חיפוש שרת
+      if (selectedWarehouse) params.warehouse = selectedWarehouse;
+      if (search) params.search = search;
       const res = await api.get("/api/products", { params });
       setProducts(res.data || []);
     } catch (err) {
@@ -129,11 +125,10 @@ export default function ProductsList() {
     }
   };
 
-  // שינוי שיוך מחסן למוצר (עדכון)
   const handleChangeWarehouse = async (productId, newWarehouseId) => {
     try {
       setRowBusy((prev) => ({ ...prev, [productId]: true }));
-      const patch = { warehouseId: newWarehouseId ? String(newWarehouseId) : "" }; // ""=ללא שיוך
+      const patch = { warehouseId: newWarehouseId ? String(newWarehouseId) : "" };
       await api.put(`/api/products/${productId}`, patch);
       await fetchProducts();
     } catch (err) {
@@ -197,7 +192,7 @@ export default function ProductsList() {
 
   return (
     <Box sx={{ direction: "rtl", textAlign: "right", p: 2 }}>
-      {/* פס עליון: כותרת, חיפוש, מסנן מחסן */}
+      {/* פס עליון */}
       <Stack
         direction={{ xs: "column", sm: "row" }}
         spacing={2}
@@ -307,26 +302,27 @@ export default function ProductsList() {
       ) : (
         // דסקטופ
         <TableContainer component={Paper} elevation={2}>
-          <Table>
+          {/* dir=rtl כדי שלא יתהפך סדר/יישור בעזרת הפלאגין */}
+          <Table dir="rtl">
             <TableHead>
               <TableRow>
-                <TableCell align="right" sx={{ width: "10%" }}>מקט</TableCell>
-                <TableCell align="right" sx={{ width: "18%" }}>שם</TableCell>
-                <TableCell align="right" sx={{ width: "26%" }}>תיאור</TableCell>
-                <TableCell align="right" sx={{ width: "8%" }}>כמות</TableCell>
-                <TableCell align="right" sx={{ width: "16%" }}>מחסן</TableCell>
-                <TableCell align="right" sx={{ width: "22%" }}>שינוי מלאי (Δ)</TableCell>
+                <TableCell style={{ textAlign: "right", width: "10%" }}>מקט</TableCell>
+                <TableCell style={{ textAlign: "right", width: "18%" }}>שם</TableCell>
+                <TableCell style={{ textAlign: "right", width: "26%" }}>תיאור</TableCell>
+                <TableCell style={{ textAlign: "right", width: "8%" }}>כמות</TableCell>
+                <TableCell style={{ textAlign: "right", width: "16%" }}>מחסן</TableCell>
+                <TableCell style={{ textAlign: "right", width: "22%" }}>שינוי מלאי (Δ)</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={6} align="center">טוען...</TableCell>
+                  <TableCell colSpan={6} style={{ textAlign: "center" }}>טוען...</TableCell>
                 </TableRow>
               )}
               {noResults && (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ color: "text.secondary" }}>
+                  <TableCell colSpan={6} style={{ textAlign: "center", color: "rgba(0,0,0,0.6)" }}>
                     לא נמצאו מוצרים
                   </TableCell>
                 </TableRow>
@@ -338,16 +334,16 @@ export default function ProductsList() {
                 return (
                   <React.Fragment key={id}>
                     <TableRow hover>
-                      <TableCell align="right" sx={{ fontFamily: "monospace" }}>
+                      <TableCell style={{ textAlign: "right", fontFamily: "monospace" }}>
                         {p.sku || "—"}
                       </TableCell>
-                      <TableCell align="right">{p.name}</TableCell>
-                      <TableCell align="right" sx={{ color: "text.secondary" }}>
+                      <TableCell style={{ textAlign: "right" }}>{p.name}</TableCell>
+                      <TableCell style={{ textAlign: "right", color: "rgba(0,0,0,0.6)" }}>
                         {p.description}
                       </TableCell>
-                      <TableCell align="right"><b>{busy ? "…" : p.stock}</b></TableCell>
+                      <TableCell style={{ textAlign: "right" }}><b>{busy ? "…" : p.stock}</b></TableCell>
 
-                      <TableCell align="right">
+                      <TableCell style={{ textAlign: "right" }}>
                         <Stack direction="row" spacing={1} alignItems="center" justifyContent="flex-end">
                           <Typography variant="body2">{getWhName(p.warehouseId)}</Typography>
                           <WarehouseSelectCell
@@ -358,7 +354,7 @@ export default function ProductsList() {
                         </Stack>
                       </TableCell>
 
-                      <TableCell align="right">
+                      <TableCell style={{ textAlign: "right" }}>
                         <Stack direction="row" spacing={1} justifyContent="flex-end" alignItems="center">
                           <StockAdjustControls id={id} />
                           <Tooltip title={selectedProduct === id ? "הסתר היסטוריה" : "הצג היסטוריה"}>
@@ -377,7 +373,7 @@ export default function ProductsList() {
 
                     {selectedProduct === id && (
                       <TableRow>
-                        <TableCell colSpan={6} sx={{ background: "#fafafa" }}>
+                        <TableCell colSpan={6} style={{ background: "#fafafa" }}>
                           <ProductHistory productId={id} />
                         </TableCell>
                       </TableRow>
