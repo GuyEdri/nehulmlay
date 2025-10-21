@@ -126,7 +126,7 @@ export default function AddProduct({ onAdd }) {
       />
 
       {/* בחירת מחסן (רשות) */}
-      <label style={{ display: "block", marginBottom: 6, text-align: "right" }}>שיוך למחסן (רשות)</label>
+      <label style={{ display: "block", marginBottom: 6, textAlign: "right" }}>שיוך למחסן (רשות)</label>
       {whLoading ? (
         <div style={{ marginBottom: 12 }}>טוען מחסנים…</div>
       ) : warehouses.length === 0 ? (
