@@ -12,6 +12,8 @@ import {
   getCustomerById,
   getProductById,
   updateProductStock,
+  // חדש: להבאת שם מחסן לפי מזהה
+  getWarehouseById,
 } from "../firestoreService.js";
 
 const router = express.Router();
@@ -36,26 +38,67 @@ const normalizeDate = (x) => {
   }
 };
 
+/* ------- עזר: השלמת שם מחסן לפי מזהה (ריק אם לא נמצא) ------- */
+async function resolveWarehouseNameById(wid) {
+  const id = String(wid || "").trim();
+  if (!id) return "";
+  try {
+    const wh = await getWarehouseById(id);
+    return String(wh?.name || "");
+  } catch {
+    return "";
+  }
+}
+
+/* ------- עזר: העשרת items בשם מחסן אם חסר ------- */
+async function hydrateItemsWithWarehouseName(items = []) {
+  const out = [];
+  for (const it of items || []) {
+    const wid = String(it?.warehouseId || "").trim();
+    let wname = String(it?.warehouseName || "").trim();
+    if (wid && !wname) {
+      wname = await resolveWarehouseNameById(wid);
+    }
+    out.push({ ...it, warehouseId: wid, warehouseName: wname });
+  }
+  return out;
+}
+
 /* =======================================
  *               GETs
  * ======================================= */
 
-// GET /api/deliveries  (מחזיר את כל הניפוקים; פרמטר product אופציונלי, נסנן בצד לקוח)
-router.get("/", async (req, res) => {
+// GET /api/deliveries  (מחזיר את כל הניפוקים; מעשיר שם מחסן לפריטים)
+router.get("/", async (_req, res) => {
   try {
     const deliveries = await getAllDeliveries();
-    res.json(deliveries);
+    const enriched = await Promise.all(
+      deliveries.map(async (d) => {
+        const wid = String(d?.warehouseId || "").trim();
+        const wname = d?.warehouseName || (await resolveWarehouseNameById(wid));
+        return {
+          ...d,
+          warehouseId: wid,
+          warehouseName: String(wname || ""),
+          items: await hydrateItemsWithWarehouseName(d.items || []),
+        };
+      })
+    );
+    res.json(enriched);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/deliveries/:id
+// GET /api/deliveries/:id  (מעשיר שם מחסן לפריטים)
 router.get("/:id", async (req, res) => {
   try {
-    const delivery = await getDeliveryById(req.params.id);
-    if (!delivery) return res.status(404).json({ error: "ניפוק לא נמצא" });
-    res.json(delivery);
+    const d = await getDeliveryById(req.params.id);
+    if (!d) return res.status(404).json({ error: "ניפוק לא נמצא" });
+    const wid = String(d?.warehouseId || "").trim();
+    const wname = d?.warehouseName || (await resolveWarehouseNameById(wid));
+    d.items = await hydrateItemsWithWarehouseName(d.items || []);
+    res.json({ ...d, warehouseId: wid, warehouseName: String(wname || "") });
   } catch (err) {
     res.status(404).json({ error: err.message });
   }
@@ -67,6 +110,7 @@ router.get("/:id", async (req, res) => {
 
 // POST /api/deliveries
 // תומך ב־warehouseId: יוודא שכל המוצרים בניפוק שייכים למחסן זה ושהמלאי מספיק — ואז יפחית מהמלאי.
+// כמו כן, נשמור גם warehouseName (ברמת הניפוק וברמת כל item).
 router.post("/", async (req, res) => {
   try {
     const {
@@ -84,7 +128,11 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "שדות חובה חסרים" });
     }
 
-    //וולידציה: מוצרים קיימים, כמות חוקית, ואם נבחר מחסן — המוצר שייך אליו
+    // אם יש מחסן מקור, נביא את שמו פעם אחת (נשמור אותו גם ב-delivery וגם ב-items)
+    const cleanWarehouseId = String(warehouseId || "").trim();
+    const resolvedWarehouseName = await resolveWarehouseNameById(cleanWarehouseId);
+
+    // וולידציה: מוצרים קיימים, כמות חוקית, ואם נבחר מחסן — המוצר שייך אליו, וגם יש מלאי מספיק
     for (const row of items) {
       if (!row?.product) return res.status(400).json({ error: "חסר מזהה מוצר בשורה" });
       const qty = Number(row.quantity);
@@ -95,7 +143,7 @@ router.post("/", async (req, res) => {
       const prod = await getProductById(String(row.product));
       if (!prod) return res.status(400).json({ error: `מוצר לא נמצא: ${String(row.product)}` });
 
-      if (warehouseId && String(prod.warehouseId || "") !== String(warehouseId)) {
+      if (cleanWarehouseId && String(prod.warehouseId || "") !== cleanWarehouseId) {
         return res.status(400).json({ error: `המוצר "${prod.name}" לא משויך למחסן שנבחר` });
       }
 
@@ -117,13 +165,22 @@ router.post("/", async (req, res) => {
     const issuedByEmail = req.user?.email || null;
     const issuedByName = req.user?.name || req.user?.displayName || null;
 
-    const cleanItems = items.map((i) => ({
-      product: String(i.product),
-      quantity: Number(i.quantity),
-    }));
+    // נשמור ב-items גם את שיוך המחסן (אם יש), כולל שם
+    const cleanItems = await hydrateItemsWithWarehouseName(
+      items.map((i) => ({
+        product: String(i.product),
+        quantity: Number(i.quantity),
+        warehouseId: cleanWarehouseId || String(i.warehouseId || "").trim(),
+        warehouseName:
+          cleanWarehouseId
+            ? resolvedWarehouseName
+            : String(i.warehouseName || "").trim() || (await resolveWarehouseNameById(String(i.warehouseId || "").trim())),
+      }))
+    );
 
     const deliveryData = {
-      warehouseId: String(warehouseId || ""), // 👈 נשמר בניפוק
+      warehouseId: cleanWarehouseId,                   // נשמר ברמת הניפוק
+      warehouseName: resolvedWarehouseName || "",      // 👈 חדש: נשמר גם השם
       customer: String(customer),
       customerName: String(customerName),
       deliveredTo: String(deliveredTo),
@@ -164,6 +221,13 @@ router.post("/:id/receipt", async (req, res) => {
       } catch {
         customerName = "";
       }
+    }
+
+    // שם מחסן להצגה (עדיפות לשם שנשמר, אחרת נביא לפי ID; ולבסוף fallback ל-ID)
+    const wid = String(delivery.warehouseId || "").trim();
+    let wname = String(delivery.warehouseName || "").trim();
+    if (wid && !wname) {
+      wname = await resolveWarehouseNameById(wid);
     }
 
     // פרטי מוצרים: name, sku, quantity
@@ -247,7 +311,10 @@ router.post("/:id/receipt", async (req, res) => {
     const byStr = delivery.issuedByName || delivery.issuedByEmail || delivery.issuedByUid || "";
     if (byStr) rtlText(`נופק\u00A0על\u00A0ידי: ${byStr}`);
     if (delivery.personalNumber) rtlText(`מספר\u00A0אישי: ${delivery.personalNumber}`);
-    if (delivery.warehouseId) rtlText(`מחסן\u00A0מקור (ID): ${delivery.warehouseId}`);
+
+    if (wname || wid) {
+      rtlText(`מחסן\u00A0מקור: ${wname || wid}`);
+    }
 
     const d = normalizeDate(delivery.date);
     const dateText = d
@@ -363,9 +430,29 @@ router.post("/:id/receipt", async (req, res) => {
  * ======================================= */
 
 // PUT /api/deliveries/:id
+// אם payload.items נשלח — נשלים warehouseName לפריטים; נשלים גם שם מחסן לניפוק אם נשלח warehouseId.
 router.put("/:id", async (req, res) => {
   try {
-    const updates = req.body || {};
+    const updates = { ...(req.body || {}) };
+
+    if (updates.warehouseId !== undefined) {
+      const wid = String(updates.warehouseId || "").trim();
+      updates.warehouseId = wid;
+      updates.warehouseName = updates.warehouseName ?? (await resolveWarehouseNameById(wid));
+    }
+
+    if (Array.isArray(updates.items)) {
+      updates.items = await hydrateItemsWithWarehouseName(
+        updates.items.map((i) => ({
+          ...i,
+          warehouseId: String(i?.warehouseId || updates.warehouseId || "").trim(),
+          warehouseName:
+            String(i?.warehouseName || "").trim() ||
+            (await resolveWarehouseNameById(String(i?.warehouseId || updates.warehouseId || "").trim())),
+        }))
+      );
+    }
+
     const updated = await updateDelivery(req.params.id, updates);
     if (!updated) return res.status(404).json({ error: "ניפוק לא נמצא" });
     res.json(updated);
