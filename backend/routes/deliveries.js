@@ -318,27 +318,44 @@ router.post("/:id/receipt", async (req, res) => {
 
     doc.moveDown(1);
 
-    // טבלת מוצרים
-    const qtyW = 70;
-    const skuW = 120;
-    const nameW = Math.max(120, contentWidth - qtyW - skuW);
+    // --------------------------------------------------------
+    // טבלת מוצרים — סדר RTL: מק״ט (ימין) | שם מוצר | כמות (שמאל)
+    // --------------------------------------------------------
+    const skuW = 120;  // מק״ט — הימני ביותר
+    const nameW = Math.max(120, contentWidth - skuW - 70);
+    const qtyW = 70;   // כמות — השמאלי ביותר
+
     let y = doc.y + 6;
     const rowH = 24;
 
     const drawHeader = () => {
+      // רקע שורה
       doc.save();
       doc.fillColor("#f0f0f0");
-      doc.rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH).fill();
+      doc
+        .rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH)
+        .fill();
       doc.restore();
 
-      doc.lineWidth(0.5).strokeColor("#888")
-        .rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH).stroke();
+      // מסגרת
+      doc
+        .lineWidth(0.5)
+        .strokeColor("#888")
+        .rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH)
+        .stroke();
 
+      // כותרות עמודות
       doc.fontSize(12).fillColor("#000");
-      doc.text("כמות", tableRightX - qtyW, y + 6, { width: qtyW - 6, align: "right" });
-      rtlTextAt("שם\u00A0מוצר", tableRightX - qtyW, y + 6, nameW - 6);
-      doc.text("מקט", tableRightX - (qtyW + nameW + skuW) + 6, y + 6, {
-        width: skuW - 6,
+
+      // מק״ט (ימין)
+      doc.text("מקט", tableRightX - skuW, y + 6, { width: skuW - 6, align: "right" });
+
+      // שם מוצר (אמצע) — RTL בפונקציה ייעודית
+      rtlTextAt("שם\u00A0מוצר", tableRightX - skuW, y + 6, nameW - 6);
+
+      // כמות (שמאל)
+      doc.text("כמות", tableRightX - (skuW + nameW + qtyW) + 6, y + 6, {
+        width: qtyW - 6,
         align: "right",
       });
 
@@ -352,14 +369,27 @@ router.post("/:id/receipt", async (req, res) => {
         drawHeader();
       }
 
-      doc.lineWidth(0.3).strokeColor("#ccc")
-        .rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH).stroke();
+      // מסגרת לשורה
+      doc
+        .lineWidth(0.3)
+        .strokeColor("#ccc")
+        .rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH)
+        .stroke();
 
       doc.fontSize(12).fillColor("#000");
-      doc.text(String(row.quantity ?? ""), tableRightX - qtyW, y + 6, { width: qtyW - 6, align: "right" });
-      rtlTextAt(String(row.name ?? ""), tableRightX - qtyW, y + 6, nameW - 6);
-      doc.text(String(row.sku || "—"), tableRightX - (qtyW + nameW + skuW) + 6, y + 6, {
+
+      // מק״ט (ימין)
+      doc.text(String(row.sku || "—"), tableRightX - skuW, y + 6, {
         width: skuW - 6,
+        align: "right",
+      });
+
+      // שם מוצר (אמצע) — RTL
+      rtlTextAt(String(row.name ?? ""), tableRightX - skuW, y + 6, nameW - 6);
+
+      // כמות (שמאל)
+      doc.text(String(row.quantity ?? ""), tableRightX - (skuW + nameW + qtyW) + 6, y + 6, {
+        width: qtyW - 6,
         align: "right",
       });
 
@@ -368,9 +398,12 @@ router.post("/:id/receipt", async (req, res) => {
 
     drawHeader();
     if (!Array.isArray(products) || products.length === 0) {
-      doc.lineWidth(0.3).strokeColor("#ccc")
-        .rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH).stroke();
-      rtlTextAt("לא נבחרו מוצרים", tableRightX - qtyW, y + 6, nameW - 6);
+      doc
+        .lineWidth(0.3)
+        .strokeColor("#ccc")
+        .rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH)
+        .stroke();
+      rtlTextAt("לא נבחרו מוצרים", tableRightX - skuW, y + 6, nameW - 6);
       y += rowH;
     } else {
       products.forEach(drawRow);
