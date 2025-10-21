@@ -103,7 +103,7 @@ router.get("/:id", async (req, res) => {
  * ========================= */
 
 // POST /api/returns — יצירת זיכוי (הגדלת מלאי)
-// תומך גם בפריטים ידניים: items[].{ product? | sku, name?, description? } + quantity
+// תומך גם בפריטים ידניים: items[].{ product? | sku, name, description? } + quantity
 router.post("/", async (req, res) => {
   try {
     const {
@@ -161,19 +161,23 @@ router.post("/", async (req, res) => {
               : (String(row.warehouseName || "").trim() || String(prod.warehouseName || "")),
         });
       } else if (row.sku) {
-        // פריט ידני — UPSERT לפי (SKU, מחסןיעד) דרך addProduct
+        // פריט ידני — UPSERT לפי (SKU, מחסן יעד) דרך addProduct
         const cleanSku = String(row.sku || "").trim().toUpperCase();
         if (!cleanSku) return res.status(400).json({ error: "SKU ידני לא תקין" });
 
-        const cleanName = String(row.name || "").trim() || cleanSku;
+        const cleanName = String(row.name || "").trim();
+        if (!cleanName) {
+          return res.status(400).json({ error: "בפריט ידני חובה להזין גם שם מוצר וגם SKU" });
+        }
+
         const wid = cleanWarehouseId; // כבר אולץ כשיש ידני
 
         // addProduct אצלך מבצע UPSERT (אם קיים באותו מחסן → מגדיל מלאי; אחרת יוצר חדש)
         const upserted = await addProduct({
-          name: cleanName,
-          sku: cleanSku,
+          name: cleanName,                          // ← שם מוצר אמיתי
+          sku: cleanSku,                            // ← מק״ט (SKU)
           description: String(row.description || "").trim(),
-          stock: qty,           // הגדלת מלאי/יצירה עם הכמות הזו
+          stock: qty,                               // הגדלת מלאי/יצירה עם הכמות הזו
           warehouseId: wid,
         });
 
