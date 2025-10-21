@@ -9,7 +9,7 @@ import customersRouter from "./routes/customers.js";
 import productsRouter from "./routes/products.js";
 import deliveriesRouter from "./routes/deliveries.js";
 import warehousesRouter from "./routes/warehouses.js";
-import returnsRouter from "./routes/returns.js"; // ← חדש: זיכויים
+import returnsRouter from "./routes/returns.js"; // ← זיכויים
 
 // Middleware
 import { verifyAuth } from "./middleware/auth.js";
@@ -20,7 +20,7 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// אם אתה מאחורי פרוקסי (Render/Heroku)
+// Render/Heroku proxy
 app.set("trust proxy", 1);
 
 // ----- Middleware -----
@@ -28,8 +28,8 @@ app.use(express.json({ limit: "10mb" })); // חתימות/PDF
 
 // CORS whitelist
 const defaultWhitelist = [
-  /^http:\/\/localhost:\d+$/, // dev (כל פורט)
-  /\.onrender\.com$/,         // Render דומיין
+  /^http:\/\/localhost:\d+$/, // dev
+  /\.onrender\.com$/,         // Render
 ];
 
 const envWhitelist = (process.env.FRONTEND_URL || "")
@@ -41,7 +41,7 @@ const whitelist = [...envWhitelist, ...defaultWhitelist];
 
 const corsMiddleware = cors({
   origin(origin, cb) {
-    if (!origin) return cb(null, true); // מאפשר לכלי CLI/health
+    if (!origin) return cb(null, true); // מאפשר CLI/health
     const ok = whitelist.some((rule) =>
       typeof rule === "string" ? rule === origin : rule.test(origin)
     );
@@ -53,18 +53,17 @@ const corsMiddleware = cors({
 
 app.use(corsMiddleware);
 
-// סטטי (אופציונלי) — לפונטים/לוגו PDF
+// סטטי (אופציונלי)
 app.use("/static", express.static(path.resolve(__dirname, "public")));
 
 // ----- Public routes -----
 app.get("/healthz", (req, res) => res.status(200).json({ ok: true }));
 app.get("/", (req, res) => res.status(200).send("UGDA98 backend is up"));
 
-// 👇 חשוב: להתיר Preflight לפני האימות
-app.options("/api/*", corsMiddleware); // ← הוסף שורה זו
+// 👇 חשוב: לאשר Preflight לכל נתיבי /api (Express 5-compatible)
+app.options(/^\/api\/.*$/, corsMiddleware);
 
 // ----- Auth guard -----
-// כל נתיב תחת /api יחייב אימות (verifyAuth שם req.user)
 app.use("/api", verifyAuth);
 
 // ----- Protected API routes -----
@@ -82,7 +81,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Error handler כללי
+// Error handler
 app.use((err, req, res, next) => {
   if (err?.message === "Not allowed by CORS") {
     return res.status(403).json({ error: "CORS: origin not allowed" });
