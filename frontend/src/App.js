@@ -6,6 +6,7 @@ import IssueStock from "./components/IssueStock";
 import DeliveriesList from "./components/DeliveriesList";
 import ProductsByContainer from "./components/ProductsByContainer.jsx";
 import Warehouses from "./components/Warehouses"; // 👈 חדש
+import AddReturn from "./components/AddReturn";    // 👈 חדש: טופס זיכוי
 
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import Login from "./components/Login";
@@ -71,11 +72,14 @@ function AppContent() {
         <button onClick={() => setScreen("issue")} style={{ padding: "8px 16px" }}>
           ניפוק מלאי
         </button>
+        <button onClick={() => setScreen("return")} style={{ padding: "8px 16px" }}>
+          זיכוי מלאי {/* 👈 חדש */}
+        </button>
         <button onClick={() => setScreen("deliveries")} style={{ padding: "8px 16px" }}>
           רשימת ניפוקים
         </button>
         <button onClick={() => setScreen("warehouses")} style={{ padding: "8px 16px" }}>
-          מחסנים {/* 👈 חדש */}
+          מחסנים
         </button>
       </nav>
 
@@ -83,8 +87,9 @@ function AppContent() {
       {screen === "products" && <ProductsList />}
       {screen === "addProduct" && <AddProduct onAdd={() => setScreen("products")} />}
       {screen === "issue" && <IssueStock onIssued={() => setScreen("products")} />}
+      {screen === "return" && <AddReturn onCreated={() => setScreen("products")} />}{/* 👈 חדש */}
       {screen === "deliveries" && <DeliveriesList />}
-      {screen === "warehouses" && <Warehouses />}{/* 👈 חדש */}
+      {screen === "warehouses" && <Warehouses />}
     </div>
   );
 }
