@@ -3,45 +3,26 @@ import React, { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 
 export default function AddReturn({ onCreated }) {
-  // מצב כללי/שגיאות
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
-
-  // מחסנים + בחירת יעד
   const [warehouses, setWarehouses] = useState([]);
   const [warehouseId, setWarehouseId] = useState("");
-
-  // לקוחות + בחירה
   const [customers, setCustomers] = useState([]);
   const [customerId, setCustomerId] = useState("");
   const [customerName, setCustomerName] = useState("");
-
-  // מי החזיר, תאריך, מספר אישי והערות
   const [returnedBy, setReturnedBy] = useState("");
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 16)); // input[type=datetime-local]
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 16));
   const [personalNumber, setPersonalNumber] = useState("");
   const [notes, setNotes] = useState("");
-
-  // שורות פריטים לזיכוי
   const [rows, setRows] = useState([
-    {
-      productId: "",
-      productLabel: "",
-      searchTerm: "",
-      suggestions: [],
-      quantity: 1,
-      manualSku: "",
-      manualName: "",
-    },
+    { productId: "", productLabel: "", searchTerm: "", suggestions: [], quantity: 1, manualSku: "", manualName: "" },
   ]);
 
-  // חתימה
   const [signature, setSignature] = useState("");
   const canvasRef = useRef(null);
   const drawing = useRef(false);
 
-  // --- טעינת מחסנים/לקוחות ---
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -54,27 +35,22 @@ export default function AddReturn({ onCreated }) {
         setWarehouses(Array.isArray(whRes.data) ? whRes.data : []);
         const custs = Array.isArray(custRes.data) ? custRes.data : [];
         setCustomers(custs);
-      } catch (e) {
-        // אפילו אם נכשלה טעינה — ניתן להמשיך עם ידני
+      } catch {
         if (!mounted) return;
         setWarehouses([]);
         setCustomers([]);
       }
     })();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
 
-  // אם נבחר לקוח — נעדכן גם שם
   useEffect(() => {
     if (!customerId) return setCustomerName("");
     const c = customers.find((x) => String(x.id || x._id) === String(customerId));
     setCustomerName(c?.name || "");
   }, [customerId, customers]);
 
-  // --- חיפוש מוצרים עם debounce קצר ---
-  const timers = useRef({}); // { idx: timeoutId }
+  const timers = useRef({});
 
   const searchProducts = async (idx, term) => {
     try {
@@ -108,25 +84,14 @@ export default function AddReturn({ onCreated }) {
   };
 
   const addRow = () => {
-    setRows((prev) => [
-      ...prev,
-      {
-        productId: "",
-        productLabel: "",
-        searchTerm: "",
-        suggestions: [],
-        quantity: 1,
-        manualSku: "",
-        manualName: "",
-      },
-    ]);
+    setRows((prev) => [...prev, { productId: "", productLabel: "", searchTerm: "", suggestions: [], quantity: 1, manualSku: "", manualName: "" }]);
   };
 
   const removeRow = (idx) => {
     setRows((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  // --- חתימה על קנבס ---
+  // ציור חתימה
   const getPos = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -166,68 +131,44 @@ export default function AddReturn({ onCreated }) {
     setSignature("");
   };
 
-  // --- שליחה ---
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg("");
     setSuccessMsg("");
 
-    // ולידציות בסיסיות
-    if (!customerId || !customerName) {
-      return setErrorMsg("יש לבחור לקוח");
-    }
-    if (!returnedBy.trim()) {
-      return setErrorMsg("יש למלא 'הוחזר ע\"י'");
-    }
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return setErrorMsg("יש להוסיף לפחות פריט אחד");
-    }
+    if (!customerId || !customerName) return setErrorMsg("יש לבחור לקוח");
+    if (!returnedBy.trim()) return setErrorMsg("יש למלא 'הוחזר ע\"י'");
+    if (!rows.length) return setErrorMsg("יש להוסיף לפחות פריט אחד");
 
-    // לבנות items לשרת:
     const itemsToSend = [];
     for (const r of rows) {
       const qty = Number(r.quantity);
-      if (!Number.isFinite(qty) || qty < 1) {
-        return setErrorMsg("כמות חייבת להיות מספר חיובי בכל פריט");
-      }
-      if (r.productId) {
-        itemsToSend.push({ product: String(r.productId), quantity: qty });
-      } else if ((r.manualSku || "").trim()) {
-        itemsToSend.push({
-          sku: String(r.manualSku).trim().toUpperCase(),
-          name: String(r.manualName || "").trim(),
-          quantity: qty,
-        });
-      } else {
-        return setErrorMsg("כל פריט חייב להיות בחירה מרשימה או להכניס SKU ידני");
-      }
+      if (!Number.isFinite(qty) || qty < 1) return setErrorMsg("כמות חייבת להיות חיובית");
+      if (r.productId) itemsToSend.push({ product: String(r.productId), quantity: qty });
+      else if ((r.manualSku || "").trim())
+        itemsToSend.push({ sku: r.manualSku.trim().toUpperCase(), name: r.manualName.trim(), quantity: qty });
+      else return setErrorMsg("כל פריט חייב מוצר או SKU ידני");
     }
 
-    // אם יש פריט ידני — מומלץ לבחור מחסן יעד
     const hasManual = itemsToSend.some((it) => it.sku && !it.product);
-    if (hasManual && !String(warehouseId || "").trim()) {
-      return setErrorMsg("יש לבחור מחסן יעד עבור פריטים ידניים (SKU)");
-    }
+    if (hasManual && !warehouseId) return setErrorMsg("יש לבחור מחסן יעד עבור פריטים ידניים");
 
     try {
       setLoading(true);
       const body = {
-        warehouseId: String(warehouseId || "").trim(),
-        customer: String(customerId),
-        customerName: String(customerName).trim(),
-        returnedBy: String(returnedBy).trim(),
+        warehouseId,
+        customer: customerId,
+        customerName,
+        returnedBy,
         items: itemsToSend,
-        date: date ? new Date(date).toISOString() : undefined,
-        personalNumber: personalNumber ? String(personalNumber) : "",
-        notes: String(notes || ""),
+        date: new Date(date).toISOString(),
+        personalNumber,
+        notes,
         ...(signature ? { signature } : {}),
       };
-
       const res = await api.post("/api/returns", body);
-
       setSuccessMsg("הזיכוי נשמר בהצלחה ✅");
-
-      // איפוס טופס
+      // reset
       setWarehouseId("");
       setCustomerId("");
       setCustomerName("");
@@ -235,19 +176,8 @@ export default function AddReturn({ onCreated }) {
       setPersonalNumber("");
       setNotes("");
       setDate(new Date().toISOString().slice(0, 16));
-      setRows([
-        {
-          productId: "",
-          productLabel: "",
-          searchTerm: "",
-          suggestions: [],
-          quantity: 1,
-          manualSku: "",
-          manualName: "",
-        },
-      ]);
+      setRows([{ productId: "", productLabel: "", searchTerm: "", suggestions: [], quantity: 1, manualSku: "", manualName: "" }]);
       clearSignature();
-
       if (onCreated) onCreated(res.data);
     } catch (err) {
       setErrorMsg(err?.response?.data?.error || "שגיאה בשמירת הזיכוי");
@@ -257,7 +187,16 @@ export default function AddReturn({ onCreated }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} style={{ maxWidth: 820, margin: "auto", direction: "rtl" }}>
+    <form
+      onSubmit={handleSubmit}
+      style={{
+        maxWidth: 820,
+        margin: "auto",
+        direction: "rtl",
+        textAlign: "right",
+        fontFamily: "Arial, sans-serif",
+      }}
+    >
       <h2 style={{ textAlign: "center" }}>זיכוי מלאי</h2>
 
       {/* מחסן יעד */}
@@ -265,7 +204,7 @@ export default function AddReturn({ onCreated }) {
       <select
         value={warehouseId}
         onChange={(e) => setWarehouseId(e.target.value)}
-        style={{ width: "100%", padding: 8, marginBottom: 10 }}
+        style={{ width: "100%", padding: 8, marginBottom: 10, textAlign: "right" }}
       >
         <option value="">בחר… (רשות; חובה לפריטים ידניים)</option>
         {warehouses.map((w) => (
@@ -276,13 +215,21 @@ export default function AddReturn({ onCreated }) {
       </select>
 
       {/* לקוח + מי החזיר + תאריך */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 10,
+          direction: "rtl",
+          textAlign: "right",
+        }}
+      >
         <div>
           <label>לקוח</label>
           <select
             value={customerId}
             onChange={(e) => setCustomerId(e.target.value)}
-            style={{ width: "100%", padding: 8, marginBottom: 10 }}
+            style={{ width: "100%", padding: 8, marginBottom: 10, textAlign: "right" }}
             required
           >
             <option value="">בחר לקוח…</option>
@@ -356,7 +303,7 @@ export default function AddReturn({ onCreated }) {
                     return next;
                   });
 
-                  if ((val || "").trim().length >= 2) {
+                  if (val.trim().length >= 2) {
                     if (timers.current[idx]) clearTimeout(timers.current[idx]);
                     timers.current[idx] = setTimeout(() => searchProducts(idx, val.trim()), 250);
                   } else {
@@ -370,17 +317,16 @@ export default function AddReturn({ onCreated }) {
                 style={{ width: "100%", padding: 8, marginBottom: 6, textAlign: "right" }}
               />
 
-              {/* הצעות */}
               {row.suggestions.length > 0 && (
                 <div style={{ border: "1px solid #ccc", borderRadius: 4, maxHeight: 160, overflowY: "auto" }}>
                   {row.suggestions.map((p) => (
                     <div
                       key={p._id || p.id}
                       onClick={() => onPickSuggestion(idx, p)}
-                      style={{ padding: "6px 8px", cursor: "pointer" }}
+                      style={{ padding: "6px 8px", cursor: "pointer", textAlign: "right" }}
                     >
-                      <div style={{ fontWeight: 600, textAlign: "right" }}>{p.name || "(ללא שם)"}</div>
-                      <div style={{ fontFamily: "monospace", fontSize: 12, opacity: 0.8, textAlign: "right" }}>
+                      <div style={{ fontWeight: 600 }}>{p.name || "(ללא שם)"}</div>
+                      <div style={{ fontFamily: "monospace", fontSize: 12, opacity: 0.8 }}>
                         {p.sku} {p.warehouseName ? `• מחסן: ${p.warehouseName}` : ""}
                       </div>
                     </div>
@@ -388,7 +334,6 @@ export default function AddReturn({ onCreated }) {
                 </div>
               )}
 
-              {/* כניסה ידנית (אם אין productId) */}
               {!row.productId && (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
                   <input
@@ -418,7 +363,6 @@ export default function AddReturn({ onCreated }) {
                 </div>
               )}
 
-              {/* תצוגה כאשר נבחר מוצר */}
               {row.productId && (
                 <div style={{ fontSize: 12, color: "#444", marginTop: 4, textAlign: "right" }}>
                   נבחר: {row.productLabel}
@@ -461,8 +405,8 @@ export default function AddReturn({ onCreated }) {
       </div>
 
       {/* חתימה */}
-      <h3 style={{ marginTop: 16, marginBottom: 8 }}>חתימה</h3>
-      <div style={{ border: "1px solid #ccc", borderRadius: 6, padding: 8, marginBottom: 12 }}>
+      <h3 style={{ marginTop: 16, marginBottom: 8, textAlign: "right" }}>חתימה</h3>
+      <div style={{ border: "1px solid #ccc", borderRadius: 6, padding: 8, marginBottom: 12, textAlign: "right" }}>
         <canvas
           ref={canvasRef}
           width={760}
@@ -486,7 +430,6 @@ export default function AddReturn({ onCreated }) {
         </div>
       </div>
 
-      {/* כפתור שמירה */}
       <button
         type="submit"
         disabled={loading}
