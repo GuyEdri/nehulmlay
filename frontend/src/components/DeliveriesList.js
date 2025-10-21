@@ -45,7 +45,7 @@ function ItemsMiniTable({ items, getName, getSku }) {
     return <Typography variant="body2" color="text.secondary">—</Typography>;
 
   return (
-    <Table size="small" sx={{ direction: "rtl", textAlign: "right" }}>
+    <Table size="small" sx={{ direction: "rtl" }} dir="rtl">
       <TableHead>
         <TableRow>
           <TableCell align="right">מקט</TableCell>
@@ -172,6 +172,7 @@ export default function DeliveriesList() {
         textAlign: "right",
         fontFamily: "Arial, sans-serif",
       }}
+      dir="rtl"
     >
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
         <Typography variant="h4" fontWeight="bold">
@@ -182,7 +183,7 @@ export default function DeliveriesList() {
         </Button>
       </Stack>
 
-      <FormControl sx={{ minWidth: 220, mb: 2, textAlign: "right" }}>
+      <FormControl sx={{ minWidth: 220, mb: 2, textAlign: "right" }} dir="rtl">
         <InputLabel id="customer-filter-label">סנן לפי לקוח</InputLabel>
         <Select
           labelId="customer-filter-label"
@@ -190,6 +191,7 @@ export default function DeliveriesList() {
           label="סנן לפי לקוח"
           onChange={(e) => setSelectedCustomer(e.target.value)}
           sx={{ direction: "rtl", textAlign: "right" }}
+          dir="rtl"
         >
           <MenuItem value="">הצג הכל</MenuItem>
           {customerOptions.map((cn) => (
@@ -203,13 +205,13 @@ export default function DeliveriesList() {
       <Divider sx={{ mb: 2 }} />
 
       {groupedAndSorted.map((group) => (
-        <Box key={group.customerName} mb={4} sx={{ textAlign: "right" }}>
+        <Box key={group.customerName} mb={4} sx={{ textAlign: "right" }} dir="rtl">
           <Typography variant="h6" color="primary" mb={1}>
             {group.customerName}
           </Typography>
 
-          <TableContainer component={Paper} elevation={2}>
-            <Table sx={{ direction: "rtl" }}>
+          <TableContainer component={Paper} elevation={2} sx={{ direction: "rtl" }} dir="rtl">
+            <Table sx={{ direction: "rtl" }} dir="rtl">
               <TableHead>
                 <TableRow>
                   <TableCell align="right">תאריך</TableCell>
