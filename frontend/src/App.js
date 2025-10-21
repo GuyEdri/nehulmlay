@@ -76,11 +76,12 @@ function AppContent() {
           זיכוי מלאי {/* 👈 חדש */}
         </button>
         <button onClick={() => setScreen("deliveries")} style={{ padding: "8px 16px" }}>
-	<button onClick={() => setScreen("returns")} style={{ padding: "8px 16px" }}>
-	  רשימת זיכויים
-	</button>
           רשימת ניפוקים
         </button>
+        <button onClick={() => setScreen("returns")} style={{ padding: "8px 16px" }}>
+          רשימת זיכויים
+        </button>
+
         <button onClick={() => setScreen("warehouses")} style={{ padding: "8px 16px" }}>
           מחסנים
         </button>
