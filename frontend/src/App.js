@@ -10,7 +10,7 @@ import ReturnsList from "./components/ReturnsList";
 
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import Login from "./components/Login";
-import { Button, Stack, Typography, Box } from "@mui/material";
+import { Button, Stack, Typography, Box, Container } from "@mui/material";
 
 function AppContent() {
   const [screen, setScreen] = useState("products");
@@ -18,13 +18,12 @@ function AppContent() {
 
   if (initializing) {
     return (
-      <Box sx={{ p: 4, direction: "rtl", textAlign: "center" }}>
+      <Box sx={{ p: 4, textAlign: "center" }}>
         <Typography>טוען...</Typography>
       </Box>
     );
   }
 
-  // לא מחובר → מסך התחברות
   if (!user) {
     return <Login />;
   }
@@ -39,10 +38,9 @@ function AppContent() {
     fontWeight: 600,
   });
 
-  // מחובר → האפליקציה
   return (
-    <div style={{ direction: "rtl", padding: 24, fontFamily: "Arial, sans-serif" }}>
-      {/* פס עליון: פרטי משתמש + יציאה */}
+    <Container maxWidth="lg" sx={{ py: 3 }}>
+      {/* פס עליון */}
       <Stack
         direction={{ xs: "column", sm: "row" }}
         justifyContent="space-between"
@@ -54,7 +52,7 @@ function AppContent() {
           ניהול מלאי
         </Typography>
         <Stack direction="row" spacing={1} alignItems="center">
-          <Typography variant="body2" sx={{ color: "#555" }}>
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>
             מחובר כ־ {user.email || user.uid}
           </Typography>
           <Button variant="outlined" size="small" onClick={logout}>
@@ -63,7 +61,7 @@ function AppContent() {
         </Stack>
       </Stack>
 
-      {/* תפריט ניווט עליון */}
+      {/* תפריט ניווט */}
       <nav
         style={{
           marginBottom: 24,
@@ -104,7 +102,7 @@ function AppContent() {
       {screen === "deliveries" && <DeliveriesList />}
       {screen === "returns" && <ReturnsList />}
       {screen === "warehouses" && <Warehouses />}
-    </div>
+    </Container>
   );
 }
 

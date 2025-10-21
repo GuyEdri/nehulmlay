@@ -1,3 +1,23 @@
+/* === RTL כללי לכל האפליקציה === */
+html[dir="rtl"], body {
+  direction: rtl;
+  text-align: right;
+  font-family: "Heebo","Rubik","Arimo","Assistant","Arial",sans-serif;
+  background-color: #fff;
+}
+
+/* כיווניות גם בתוך קומפוננטות MUI */
+.MuiTable-root,
+.MuiTableCell-root,
+.MuiTableHead-root,
+.MuiTableBody-root,
+.MuiTypography-root,
+.MuiButton-root,
+.MuiStack-root {
+  direction: rtl;
+}
+
+/* === הסגנונות המקוריים שלך נשמרים === */
 .App {
   text-align: center;
 }
@@ -28,6 +48,7 @@
   color: #61dafb;
 }
 
+/* אנימציית לוגו */
 @keyframes App-logo-spin {
   from {
     transform: rotate(0deg);
@@ -36,3 +57,4 @@
     transform: rotate(360deg);
   }
 }
+

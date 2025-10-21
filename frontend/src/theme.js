@@ -1,10 +1,22 @@
 // src/theme.js
-import { createTheme } from '@mui/material/styles';
+import { createTheme } from "@mui/material/styles";
 
 const theme = createTheme({
-  direction: 'rtl',
+  direction: "rtl",
   typography: {
-    fontFamily: `'Roboto', 'Helvetica', 'Arial', sans-serif`,
+    fontFamily: `"Heebo","Rubik","Arimo","Assistant","Arial",sans-serif`,
+  },
+  components: {
+    MuiCssBaseline: {
+      styleOverrides: {
+        html: { direction: "rtl" },
+        body: {
+          direction: "rtl",
+          textAlign: "right",
+          fontFamily: `"Heebo","Rubik","Arimo","Assistant","Arial",sans-serif`,
+        },
+      },
+    },
   },
 });
 

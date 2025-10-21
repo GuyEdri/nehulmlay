@@ -1,20 +1,32 @@
+/* RTL גלובלי ומראה בסיסי */
+html[dir="rtl"], body {
+  direction: rtl;
+  text-align: right;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: "Heebo","Rubik","Arimo","Assistant","Arial",sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-    background-image: url('./assets/Logo_hativa_551.png');
+
+  /* לוגו רקע — ממוקם בימין-עליון ב־RTL */
+  background-image: url('./assets/Logo_hativa_551.png');
   background-size: 150px 150px;
-  background-position: left top;
+  background-position: right top; /* היה left top */
   background-repeat: no-repeat;
-  margin: 0;
+
   height: 100vh;
   width: 100vw;
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
+
