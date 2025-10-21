@@ -4,15 +4,19 @@ import PDFDocument from "pdfkit";
 import path from "path";
 import { fileURLToPath } from "url";
 import {
+  // Returns
   getAllReturns,
   getReturnById,
   addReturn,
   updateReturn,
   deleteReturn,
+  // Entities
   getCustomerById,
   getProductById,
   updateProductStock,
   getWarehouseById,
+  // ל-UPSERT של פריטים ידניים
+  addProduct,
 } from "../firestoreService.js";
 
 const router = express.Router();
@@ -98,15 +102,16 @@ router.get("/:id", async (req, res) => {
  *          POST
  * ========================= */
 
-// POST /api/returns  — יצירת זיכוי (מעלה מלאי)
+// POST /api/returns — יצירת זיכוי (הגדלת מלאי)
+// תומך גם בפריטים ידניים: items[].{ product? | sku, name?, description? } + quantity
 router.post("/", async (req, res) => {
   try {
     const {
-      warehouseId = "",      // מחסן יעד (רשות)
+      warehouseId = "",      // מחסן יעד: חובה כאשר יש פריטים ידניים (sku)
       customer,
       customerName,
       returnedBy,            // מי החזיר
-      items,                 // [{ product, quantity, (optional) warehouseId/Name }]
+      items,                 // [{ product? , sku?, name?, description?, quantity }]
       signature,             // dataURL (רשות)
       date,
       personalNumber,        // רשות
@@ -118,23 +123,69 @@ router.post("/", async (req, res) => {
     }
 
     const cleanWarehouseId = String(warehouseId || "").trim();
+    const hasManualItem = items.some((it) => !it?.product && it?.sku);
+    if (hasManualItem && !cleanWarehouseId) {
+      return res.status(400).json({ error: "עבור פריטים ידניים לפי SKU חובה לבחור מחסן יעד" });
+    }
+
     const resolvedWarehouseName = await resolveWarehouseNameById(cleanWarehouseId);
 
-    // ולידציה בסיסית: מוצר קיים + כמות חיובית
+    // ולידציית כמויות
     for (const row of items) {
-      if (!row?.product) return res.status(400).json({ error: "חסר מזהה מוצר בשורה" });
       const qty = Number(row.quantity);
       if (!Number.isFinite(qty) || qty < 1) {
         return res.status(400).json({ error: "כמות חייבת להיות מספר חיובי" });
       }
-      const prod = await getProductById(String(row.product));
-      if (!prod) return res.status(400).json({ error: `מוצר לא נמצא: ${String(row.product)}` });
-      // בזיכוי אין צורך לבדוק התאמת מחסן מקור — אנחנו מחזירים למחסן יעד שנבחר עכשיו.
     }
 
-    // העלאת מלאי בפועל
+    // נרמול פריטים → תמיד עם product id
+    const normalizedItems = [];
     for (const row of items) {
-      await updateProductStock(String(row.product), +Number(row.quantity));
+      const qty = Number(row.quantity);
+
+      if (row.product) {
+        // מוצר קיים
+        const prod = await getProductById(String(row.product));
+        if (!prod) return res.status(400).json({ error: `מוצר לא נמצא: ${String(row.product)}` });
+
+        // בזיכוי — מגדילים מלאי במוצר עצמו
+        await updateProductStock(String(row.product), +qty);
+
+        normalizedItems.push({
+          product: String(row.product),
+          quantity: qty,
+          warehouseId: cleanWarehouseId || String(row.warehouseId || prod.warehouseId || "").trim(),
+          warehouseName:
+            cleanWarehouseId
+              ? resolvedWarehouseName
+              : (String(row.warehouseName || "").trim() || String(prod.warehouseName || "")),
+        });
+      } else if (row.sku) {
+        // פריט ידני — UPSERT לפי (SKU, מחסןיעד) דרך addProduct
+        const cleanSku = String(row.sku || "").trim().toUpperCase();
+        if (!cleanSku) return res.status(400).json({ error: "SKU ידני לא תקין" });
+
+        const cleanName = String(row.name || "").trim() || cleanSku;
+        const wid = cleanWarehouseId; // כבר אולץ כשיש ידני
+
+        // addProduct אצלך מבצע UPSERT (אם קיים באותו מחסן → מגדיל מלאי; אחרת יוצר חדש)
+        const upserted = await addProduct({
+          name: cleanName,
+          sku: cleanSku,
+          description: String(row.description || "").trim(),
+          stock: qty,           // הגדלת מלאי/יצירה עם הכמות הזו
+          warehouseId: wid,
+        });
+
+        normalizedItems.push({
+          product: String(upserted.id),
+          quantity: qty,
+          warehouseId: wid,
+          warehouseName: upserted.warehouseName || resolvedWarehouseName || "",
+        });
+      } else {
+        return res.status(400).json({ error: "כל פריט חייב להכיל product או sku" });
+      }
     }
 
     // מי רשם זיכוי (מה־auth אם יש)
@@ -142,30 +193,13 @@ router.post("/", async (req, res) => {
     const createdByEmail = req.user?.email || null;
     const createdByName = req.user?.name || req.user?.displayName || null;
 
-    // items עשירים בשם מחסן
-    const cleanItems = await Promise.all(
-      items.map(async (i) => {
-        const wid = cleanWarehouseId || String(i.warehouseId || "").trim();
-        const wname =
-          cleanWarehouseId
-            ? resolvedWarehouseName
-            : (String(i.warehouseName || "").trim() || (await resolveWarehouseNameById(wid)));
-        return {
-          product: String(i.product),
-          quantity: Number(i.quantity),
-          warehouseId: wid,
-          warehouseName: wname,
-        };
-      })
-    );
-
     const returnData = {
       warehouseId: cleanWarehouseId,
       warehouseName: resolvedWarehouseName || "",
       customer: String(customer),
       customerName: String(customerName),
       returnedBy: String(returnedBy),
-      items: cleanItems,
+      items: normalizedItems,
       signature: signature ? String(signature) : "",
       date: date ? new Date(date) : new Date(),
       personalNumber: personalNumber ? String(personalNumber) : "",
@@ -178,6 +212,7 @@ router.post("/", async (req, res) => {
     const created = await addReturn(returnData);
     res.status(201).json(created);
   } catch (err) {
+    console.error("POST /api/returns error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -205,7 +240,7 @@ router.post("/:id/receipt", async (req, res) => {
       }
     }
 
-    // שם מחסן
+    // שם מחסן יעד
     const wid = String(data.warehouseId || "").trim();
     let wname = String(data.warehouseName || "").trim();
     if (wid && !wname) {
