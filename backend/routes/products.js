@@ -8,44 +8,45 @@ import {
   updateProduct,
   deleteProduct,
   updateProductStock,
+  // Container
   getProductsGroupedByContainer,
   getProductsByContainer,
-  getProductsByWarehouse, // 👈 חדש
+  // Warehouses
+  getProductsByWarehouse,
+  getProductsByWarehouseName,
+  getProductsByWarehouseFlexible,
+  getProductsGroupedByWarehouse,
 } from "../firestoreService.js";
 
 const router = express.Router();
 
-// GET - כל המוצרים / חיפוש / קיבוץ לפי מכולה / פילטר לפי מכולה / פילטר לפי מחסן
+// GET - כל המוצרים / חיפוש / קיבוץ לפי מכולה/מחסן / פילטר לפי מכולה/מחסן
 router.get("/", async (req, res) => {
   try {
-    const { search = "", groupBy = "", container = "", warehouseId = "" } = req.query;
+    const {
+      search = "",
+      groupBy = "",
+      container = "",
+      warehouseId = "",
+      warehouseName = "",
+      warehouse = "", // פרמטר גמיש (id או שם)
+    } = req.query;
 
-    // 1) קיבוץ לפי מכולה
+    // === קיבוץ לפי מחסן ===
+    if (String(groupBy).toLowerCase() === "warehouse") {
+      const grouped = await getProductsGroupedByWarehouse();
+      return res.json({ groupedBy: "warehouse", groups: grouped });
+    }
+
+    // === קיבוץ לפי מכולה ===
     if (String(groupBy).toLowerCase() === "container") {
       const grouped = await getProductsGroupedByContainer();
       return res.json({ groupedBy: "container", groups: grouped });
     }
 
-    // 2) פילטר לפי מכולה
+    // === פילטר לפי מכולה ===
     if (container) {
-      const items = await getProductsByContainer(container);
-      const term = String(search).trim();
-      let filtered = items;
-      if (term) {
-        const up = term.toUpperCase();
-        const low = term.toLowerCase();
-        filtered = items.filter((p) => {
-          const name = String(p.name || "");
-          const sku = String(p.sku || "");
-          return name.toLowerCase().includes(low) || sku.toUpperCase().includes(up);
-        });
-      }
-      return res.json(filtered);
-    }
-
-    // 3) פילטר לפי מחסן
-    if (warehouseId) {
-      let items = await getProductsByWarehouse(warehouseId);
+      let items = await getProductsByContainer(container);
       const term = String(search).trim();
       if (term) {
         const up = term.toUpperCase();
@@ -59,7 +60,32 @@ router.get("/", async (req, res) => {
       return res.json(items);
     }
 
-    // 4) ברירת מחדל: כל המוצרים + חיפוש
+    // === פילטר לפי מחסן (תומך בשלוש דרכים) ===
+    if (warehouseId || warehouseName || warehouse) {
+      let items = [];
+      if (warehouseId) {
+        items = await getProductsByWarehouse(warehouseId);
+      } else if (warehouseName) {
+        items = await getProductsByWarehouseName(warehouseName);
+      } else {
+        // פרמטר גמיש: אם זה מזהה תקין → לפי מזהה, אחרת לפי שם
+        items = await getProductsByWarehouseFlexible(warehouse);
+      }
+
+      const term = String(search).trim();
+      if (term) {
+        const up = term.toUpperCase();
+        const low = term.toLowerCase();
+        items = items.filter((p) => {
+          const name = String(p.name || "");
+          const sku = String(p.sku || "");
+          return name.toLowerCase().includes(low) || sku.toUpperCase().includes(up);
+        });
+      }
+      return res.json(items);
+    }
+
+    // === ברירת מחדל: כל המוצרים + חיפוש אופציונלי ===
     let products = await getAllProducts();
     const term = String(search).trim();
     if (term) {
@@ -92,7 +118,14 @@ router.get("/:id", async (req, res) => {
 // POST - הוספת מוצר חדש
 router.post("/", async (req, res) => {
   try {
-    const { name, sku, description = "", stock = 0, warehouseId = "", warehouseName = "" } = req.body;
+    const {
+      name,
+      sku,
+      description = "",
+      stock = 0,
+      warehouseId = "",
+      warehouseName = "",
+    } = req.body;
 
     const cleanName = String(name || "").trim();
     const cleanSku = String(sku || "").trim().toUpperCase();

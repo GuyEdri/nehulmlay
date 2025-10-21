@@ -97,6 +97,7 @@ export async function getAllProducts() {
 }
 
 export async function getProductsByWarehouse(warehouseIdRaw) {
+  // לפי מזהה מחסן
   const wid = String(warehouseIdRaw || "").trim();
   if (!wid) return [];
   const snap = await productsCol.where("warehouseId", "==", wid).get();
@@ -104,10 +105,25 @@ export async function getProductsByWarehouse(warehouseIdRaw) {
 }
 
 export async function getProductsByWarehouseName(warehouseNameRaw) {
+  // לפי שם מחסן (רגיש לרישיות כמו בפיירסטור)
   const wname = String(warehouseNameRaw || "").trim();
   if (!wname) return [];
   const snap = await productsCol.where("warehouseName", "==", wname).get();
   return snap.docs.map((d) => ({ id: d.id, _id: d.id, ...d.data() }));
+}
+
+/** שליפה גמישה לפי טקסט: אם זה מזהה מחסן תקף → לפי id, אחרת ננסה בשם */
+export async function getProductsByWarehouseFlexible(inputRaw) {
+  const val = String(inputRaw || "").trim();
+  if (!val) return [];
+  // נסה למצוא מחסן לפי מזהה
+  try {
+    const wh = await getWarehouseById(val);
+    return await getProductsByWarehouse(wh.id);
+  } catch {
+    // אם לא מזהה, ננסה לפי שם
+    return await getProductsByWarehouseName(val);
+  }
 }
 
 export async function getProductById(id) {
@@ -264,7 +280,7 @@ export async function deleteProduct(id) {
   await productsCol.doc(String(id)).delete();
 }
 
-/** קיבוץ לפי “מכולה” (נשען על תיאור או שדה container) */
+/* ================== קיבוצים/שליפות לפי "מכולה" (מתיאור) ================== */
 export async function getProductsGroupedByContainer() {
   const snapshot = await productsCol.get();
   const groups = {};
@@ -289,7 +305,45 @@ export async function getProductsByContainer(containerRaw) {
   const all = await getAllProducts();
   return all
     .map((p) => ({ ...p, container: p.container || extractContainer(p.description || "") }))
-    .filter((p) => p.container.toUpperCase() === container);
+    .filter((p) => String(p.container || "").toUpperCase() === container);
+}
+
+/* ================== קיבוצים/שליפות לפי "מחסן" ================== */
+
+/** קיבוץ לפי מחסן: מחזיר { [<warehouseName or "ללא מחסן">]: Product[] }
+ *  שומר גם warehouseId בכל פריט, כדי שתוכל לקשר ב־UI.
+ */
+export async function getProductsGroupedByWarehouse() {
+  const snapshot = await productsCol.get();
+  const groups = {};
+  snapshot.forEach((doc) => {
+    const data = doc.data() || {};
+    const wname = String(data.warehouseName || "").trim();
+    const key = wname || "ללא מחסן";
+    if (!groups[key]) groups[key] = [];
+    groups[key].push({
+      id: doc.id,
+      _id: doc.id,
+      ...data,
+      warehouseId: String(data.warehouseId || "").trim(),
+      warehouseName: wname,
+    });
+  });
+  Object.keys(groups).forEach((k) => {
+    groups[k].sort((a, b) =>
+      String(a.name || "").localeCompare(String(b.name || ""), "he")
+    );
+  });
+  return groups;
+}
+
+/** רשימת שמות מחסנים על בסיס מוצרים בפועל (distinct) */
+export async function getDistinctWarehousesFromProducts() {
+  const all = await getAllProducts();
+  const set = new Set(
+    all.map((p) => String(p.warehouseName || "").trim()).filter(Boolean)
+  );
+  return Array.from(set).sort((a, b) => a.localeCompare(b, "he"));
 }
 
 /* ================== CUSTOMERS ================== */
