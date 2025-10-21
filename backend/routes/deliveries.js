@@ -12,7 +12,7 @@ import {
   getCustomerById,
   getProductById,
   updateProductStock,
-  // חדש: להבאת שם מחסן לפי מזהה
+  // נדרש לשם המחסן
   getWarehouseById,
 } from "../firestoreService.js";
 
@@ -50,18 +50,18 @@ async function resolveWarehouseNameById(wid) {
   }
 }
 
-/* ------- עזר: העשרת items בשם מחסן אם חסר ------- */
+/* ------- עזר: העשרת items בשם מחסן אם חסר (ל-GETים) ------- */
 async function hydrateItemsWithWarehouseName(items = []) {
-  const out = [];
-  for (const it of items || []) {
-    const wid = String(it?.warehouseId || "").trim();
-    let wname = String(it?.warehouseName || "").trim();
-    if (wid && !wname) {
-      wname = await resolveWarehouseNameById(wid);
-    }
-    out.push({ ...it, warehouseId: wid, warehouseName: wname });
-  }
-  return out;
+  return Promise.all(
+    (items || []).map(async (it) => {
+      const wid = String(it?.warehouseId || "").trim();
+      let wname = String(it?.warehouseName || "").trim();
+      if (wid && !wname) {
+        wname = await resolveWarehouseNameById(wid);
+      }
+      return { ...it, warehouseId: wid, warehouseName: wname };
+    })
+  );
 }
 
 /* =======================================
@@ -76,12 +76,8 @@ router.get("/", async (_req, res) => {
       deliveries.map(async (d) => {
         const wid = String(d?.warehouseId || "").trim();
         const wname = d?.warehouseName || (await resolveWarehouseNameById(wid));
-        return {
-          ...d,
-          warehouseId: wid,
-          warehouseName: String(wname || ""),
-          items: await hydrateItemsWithWarehouseName(d.items || []),
-        };
+        const items = await hydrateItemsWithWarehouseName(d.items || []);
+        return { ...d, warehouseId: wid, warehouseName: String(wname || ""), items };
       })
     );
     res.json(enriched);
@@ -97,8 +93,8 @@ router.get("/:id", async (req, res) => {
     if (!d) return res.status(404).json({ error: "ניפוק לא נמצא" });
     const wid = String(d?.warehouseId || "").trim();
     const wname = d?.warehouseName || (await resolveWarehouseNameById(wid));
-    d.items = await hydrateItemsWithWarehouseName(d.items || []);
-    res.json({ ...d, warehouseId: wid, warehouseName: String(wname || "") });
+    const items = await hydrateItemsWithWarehouseName(d.items || []);
+    res.json({ ...d, warehouseId: wid, warehouseName: String(wname || ""), items });
   } catch (err) {
     res.status(404).json({ error: err.message });
   }
@@ -110,11 +106,11 @@ router.get("/:id", async (req, res) => {
 
 // POST /api/deliveries
 // תומך ב־warehouseId: יוודא שכל המוצרים בניפוק שייכים למחסן זה ושהמלאי מספיק — ואז יפחית מהמלאי.
-// כמו כן, נשמור גם warehouseName (ברמת הניפוק וברמת כל item).
+// נשמור גם warehouseName (ברמת הניפוק וברמת כל item).
 router.post("/", async (req, res) => {
   try {
     const {
-      warehouseId = "",        // 👈 מחסן מקור (רשות; אם ריק – אין אילוץ שייכות)
+      warehouseId = "",        // מחסן מקור (רשות; אם ריק – אין אילוץ שייכות)
       customer,
       customerName,
       deliveredTo,
@@ -128,7 +124,6 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "שדות חובה חסרים" });
     }
 
-    // אם יש מחסן מקור, נביא את שמו פעם אחת (נשמור אותו גם ב-delivery וגם ב-items)
     const cleanWarehouseId = String(warehouseId || "").trim();
     const resolvedWarehouseName = await resolveWarehouseNameById(cleanWarehouseId);
 
@@ -165,22 +160,26 @@ router.post("/", async (req, res) => {
     const issuedByEmail = req.user?.email || null;
     const issuedByName = req.user?.name || req.user?.displayName || null;
 
-    // נשמור ב-items גם את שיוך המחסן (אם יש), כולל שם
-    const cleanItems = await hydrateItemsWithWarehouseName(
-      items.map((i) => ({
-        product: String(i.product),
-        quantity: Number(i.quantity),
-        warehouseId: cleanWarehouseId || String(i.warehouseId || "").trim(),
-        warehouseName:
+    // בניית items עם השלמת שם מחסן באופן אסינכרוני
+    const cleanItems = await Promise.all(
+      items.map(async (i) => {
+        const wid = cleanWarehouseId || String(i.warehouseId || "").trim();
+        const wname =
           cleanWarehouseId
             ? resolvedWarehouseName
-            : String(i.warehouseName || "").trim() || (await resolveWarehouseNameById(String(i.warehouseId || "").trim())),
-      }))
+            : (String(i.warehouseName || "").trim() || (await resolveWarehouseNameById(wid)));
+        return {
+          product: String(i.product),
+          quantity: Number(i.quantity),
+          warehouseId: wid,
+          warehouseName: wname,
+        };
+      })
     );
 
     const deliveryData = {
-      warehouseId: cleanWarehouseId,                   // נשמר ברמת הניפוק
-      warehouseName: resolvedWarehouseName || "",      // 👈 חדש: נשמר גם השם
+      warehouseId: cleanWarehouseId,
+      warehouseName: resolvedWarehouseName || "",
       customer: String(customer),
       customerName: String(customerName),
       deliveredTo: String(deliveredTo),
@@ -442,14 +441,14 @@ router.put("/:id", async (req, res) => {
     }
 
     if (Array.isArray(updates.items)) {
-      updates.items = await hydrateItemsWithWarehouseName(
-        updates.items.map((i) => ({
-          ...i,
-          warehouseId: String(i?.warehouseId || updates.warehouseId || "").trim(),
-          warehouseName:
+      updates.items = await Promise.all(
+        updates.items.map(async (i) => {
+          const wid = String(i?.warehouseId || updates.warehouseId || "").trim();
+          const wname =
             String(i?.warehouseName || "").trim() ||
-            (await resolveWarehouseNameById(String(i?.warehouseId || updates.warehouseId || "").trim())),
-        }))
+            (await resolveWarehouseNameById(wid));
+          return { ...i, warehouseId: wid, warehouseName: wname };
+        })
       );
     }
 
