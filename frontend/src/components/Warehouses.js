@@ -5,20 +5,27 @@ import {
   Box, Paper, TextField, Button, Typography, Stack, Alert
 } from "@mui/material";
 
+// סטייל קבוע לשדות טופס ב-RTL (כולל לייבלים)
 const rtlTextFieldSx = {
   direction: "rtl",
   textAlign: "right",
+  "& .MuiInputBase-root": {
+    direction: "rtl",
+    textAlign: "right",
+  },
   "& .MuiInputBase-input": {
     direction: "rtl",
     textAlign: "right",
   },
-  "& label": {
+  "& .MuiFormLabel-root": {
     right: 14,
     left: "auto",
     transformOrigin: "right top",
+    textAlign: "right",
   },
-  "& label.MuiInputLabel-shrink": {
-    transformOrigin: "right top",
+  // לפעמים האאוטליין וה-legend מתעקשים — מהדקים גם אותם
+  "& .MuiOutlinedInput-notchedOutline legend": {
+    textAlign: "right",
   },
 };
 
@@ -94,43 +101,59 @@ export default function Warehouses() {
       </Typography>
 
       {/* טופס יצירת מחסן */}
-      <Paper sx={{ p: 2, mb: 3, direction: "rtl" }}>
+      <Paper sx={{ p: 2, mb: 3 }} dir="rtl">
         <Typography variant="h6" mb={1}>יצירת מחסן חדש</Typography>
         <form onSubmit={onCreate} dir="rtl" style={{ direction: "rtl" }}>
           <Stack spacing={2} sx={{ direction: "rtl" }}>
             <TextField
-              dir="rtl"
+              variant="outlined"
+              fullWidth
+              required
               label="שם מחסן *"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              required
-              fullWidth
               sx={rtlTextFieldSx}
-              inputProps={{ dir: "rtl" }}
+              InputLabelProps={{
+                dir: "rtl",
+                sx: { right: 14, left: "auto", transformOrigin: "right top", textAlign: "right" },
+              }}
+              inputProps={{ dir: "rtl", style: { textAlign: "right" } }}
             />
+
             <TextField
-              dir="rtl"
+              variant="outlined"
+              fullWidth
               label="כתובת (רשות)"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              fullWidth
               sx={rtlTextFieldSx}
-              inputProps={{ dir: "rtl" }}
+              InputLabelProps={{
+                dir: "rtl",
+                sx: { right: 14, left: "auto", transformOrigin: "right top", textAlign: "right" },
+              }}
+              inputProps={{ dir: "rtl", style: { textAlign: "right" } }}
             />
+
             <TextField
-              dir="rtl"
-              label="הערות (רשות)"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              variant="outlined"
               fullWidth
               multiline
               minRows={2}
+              label="הערות (רשות)"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
               sx={rtlTextFieldSx}
-              inputProps={{ dir: "rtl" }}
+              InputLabelProps={{
+                dir: "rtl",
+                sx: { right: 14, left: "auto", transformOrigin: "right top", textAlign: "right" },
+              }}
+              inputProps={{ dir: "rtl", style: { textAlign: "right" } }}
             />
+
             <Stack direction="row" justifyContent="flex-end" sx={{ direction: "rtl" }}>
               <Button type="submit" variant="contained">צור מחסן</Button>
             </Stack>
+
             {err && <Alert severity="error" dir="rtl">{err}</Alert>}
             {success && <Alert severity="success" dir="rtl">{success}</Alert>}
           </Stack>
@@ -138,7 +161,7 @@ export default function Warehouses() {
       </Paper>
 
       {/* רשימת מחסנים – טבלת HTML רגילה */}
-      <Paper sx={{ p: 0, direction: "rtl" }}>
+      <Paper sx={{ p: 0 }} dir="rtl">
         <div style={{ padding: "12px 16px" }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>רשימת מחסנים</Typography>
         </div>
