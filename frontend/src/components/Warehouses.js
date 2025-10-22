@@ -2,8 +2,8 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api";
 import {
-  Box, Paper, TextField, Button, Typography, Stack, Alert,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow
+  Box, Paper, TextField, Button, Typography, Stack,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Alert
 } from "@mui/material";
 
 export default function Warehouses() {
@@ -23,7 +23,7 @@ export default function Warehouses() {
       setLoading(true);
       const res = await api.get("/api/warehouses");
       setList(Array.isArray(res.data) ? res.data : []);
-    } catch {
+    } catch (e) {
       setList([]);
     } finally {
       setLoading(false);
@@ -62,55 +62,38 @@ export default function Warehouses() {
   };
 
   return (
-    <Box
-      sx={{
-        direction: "rtl",
-        textAlign: "right",
-        p: 3,
-        maxWidth: 900,
-        mx: "auto",
-        fontFamily: "Arial, sans-serif",
-      }}
-    >
+    <Box sx={{ direction: "rtl", textAlign: "right", p: 3, maxWidth: 900, mx: "auto" }}>
       <Typography variant="h5" fontWeight="bold" mb={2}>
         מחסנים
       </Typography>
 
       {/* טופס יצירת מחסן */}
-      <Paper sx={{ p: 2, mb: 3, direction: "rtl" }}>
+      <Paper sx={{ p: 2, mb: 3 }}>
         <Typography variant="h6" mb={1}>יצירת מחסן חדש</Typography>
-        <form onSubmit={onCreate} dir="rtl">
+        <form onSubmit={onCreate}>
           <Stack spacing={2}>
             <TextField
               label="שם מחסן *"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
-              fullWidth
               inputProps={{ style: { textAlign: "right" } }}
-              InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
             />
             <TextField
               label="כתובת (רשות)"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              fullWidth
               inputProps={{ style: { textAlign: "right" } }}
-              InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
             />
             <TextField
               label="הערות (רשות)"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              fullWidth
               multiline
               minRows={2}
               inputProps={{ style: { textAlign: "right" } }}
-              InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
             />
-            <Stack direction="row" justifyContent="flex-start">
-              <Button type="submit" variant="contained">צור מחסן</Button>
-            </Stack>
+            <Button type="submit" variant="contained">צור מחסן</Button>
             {err && <Alert severity="error" dir="rtl">{err}</Alert>}
             {success && <Alert severity="success" dir="rtl">{success}</Alert>}
           </Stack>
@@ -118,8 +101,8 @@ export default function Warehouses() {
       </Paper>
 
       {/* רשימת מחסנים */}
-      <TableContainer component={Paper} elevation={2} sx={{ direction: "rtl" }}>
-        <Table sx={{ direction: "rtl" }}>
+      <TableContainer component={Paper} elevation={2}>
+        <Table>
           <TableHead>
             <TableRow>
               <TableCell align="right" sx={{ width: "35%" }}>שם</TableCell>
@@ -129,16 +112,12 @@ export default function Warehouses() {
           </TableHead>
           <TableBody>
             {loading && (
-              <TableRow>
-                <TableCell colSpan={3} align="center">טוען…</TableCell>
-              </TableRow>
+              <TableRow><TableCell colSpan={3} align="center">טוען…</TableCell></TableRow>
             )}
             {!loading && list.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={3} align="center" sx={{ color: "text.secondary" }}>
-                  אין מחסנים עדיין
-                </TableCell>
-              </TableRow>
+              <TableRow><TableCell colSpan={3} align="center" sx={{ color: "text.secondary" }}>
+                אין מחסנים עדיין
+              </TableCell></TableRow>
             )}
             {list.map((w) => {
               const id = String(w._id || w.id);
