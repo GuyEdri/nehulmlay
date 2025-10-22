@@ -100,60 +100,42 @@ export default function Warehouses() {
         מחסנים
       </Typography>
 
+
       {/* טופס יצירת מחסן */}
-      <Paper sx={{ p: 2, mb: 3 }} dir="rtl">
+      <Paper sx={{ p: 2, mb: 3, direction: "rtl" }}>
         <Typography variant="h6" mb={1}>יצירת מחסן חדש</Typography>
-        <form onSubmit={onCreate} dir="rtl" style={{ direction: "rtl" }}>
-          <Stack spacing={2} sx={{ direction: "rtl" }}>
+        <form onSubmit={onCreate} dir="rtl">
+          <Stack spacing={2}>
             <TextField
-              variant="outlined"
-              fullWidth
-              required
               label="שם מחסן *"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              sx={rtlTextFieldSx}
-              InputLabelProps={{
-                dir: "rtl",
-                sx: { right: 14, left: "auto", transformOrigin: "right top", textAlign: "right" },
-              }}
-              inputProps={{ dir: "rtl", style: { textAlign: "right" } }}
-            />
-
-            <TextField
-              variant="outlined"
+              required
               fullWidth
+              inputProps={{ style: { textAlign: "right" } }}
+              InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
+            />
+            <TextField
               label="כתובת (רשות)"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              sx={rtlTextFieldSx}
-              InputLabelProps={{
-                dir: "rtl",
-                sx: { right: 14, left: "auto", transformOrigin: "right top", textAlign: "right" },
-              }}
-              inputProps={{ dir: "rtl", style: { textAlign: "right" } }}
-            />
-
-            <TextField
-              variant="outlined"
               fullWidth
-              multiline
-              minRows={2}
+              inputProps={{ style: { textAlign: "right" } }}
+              InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
+            />
+            <TextField
               label="הערות (רשות)"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              sx={rtlTextFieldSx}
-              InputLabelProps={{
-                dir: "rtl",
-                sx: { right: 14, left: "auto", transformOrigin: "right top", textAlign: "right" },
-              }}
-              inputProps={{ dir: "rtl", style: { textAlign: "right" } }}
+              fullWidth
+              multiline
+              minRows={2}
+              inputProps={{ style: { textAlign: "right" } }}
+              InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
             />
-
-            <Stack direction="row" justifyContent="flex-end" sx={{ direction: "rtl" }}>
+            <Stack direction="row" justifyContent="flex-start">
               <Button type="submit" variant="contained">צור מחסן</Button>
             </Stack>
-
             {err && <Alert severity="error" dir="rtl">{err}</Alert>}
             {success && <Alert severity="success" dir="rtl">{success}</Alert>}
           </Stack>
