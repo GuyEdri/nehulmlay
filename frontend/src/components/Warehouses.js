@@ -141,7 +141,7 @@ export default function Warehouses() {
       fullWidth
       multiline
       minRows={2}
-      sx={rtlTextFieldSx}
+      sx={{textAlign:"right"}}
       inputProps={{ dir: "rtl" }}
       InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
     />
