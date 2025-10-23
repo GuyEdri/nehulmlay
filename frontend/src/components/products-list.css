@@ -185,3 +185,15 @@
     width: 100% !important;
   }
 }
+/* הקטנת שדה שינוי מלאי (Δ) */
+.pl-input[type="number"] {
+  width: 90px;            /* מספיק ל-5 ספרות */
+  text-align: right;
+}
+
+/* במובייל – טיפה יותר רחב כדי שיהיה נוח ללחיצה */
+@media (max-width: 767px) {
+  .pl-input[type="number"] {
+    width: 110px;
+  }
+}
