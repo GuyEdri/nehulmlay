@@ -185,15 +185,19 @@
     width: 100% !important;
   }
 }
-/* הקטנת שדה שינוי מלאי (Δ) */
-.pl-input[type="number"] {
-  width: 90px;            /* מספיק ל-5 ספרות */
-  text-align: right;
+/* הקטנת שדה שינוי מלאי (Δ) בצורה מוחלטת */
+.pl-row .pl-input[type="number"] {
+  width: 90px !important;      /* שולט חזק – עד 5 ספרות */
+  max-width: 90px !important;
+  min-width: 80px;
+  text-align: right !important;
+  box-sizing: border-box;
 }
 
-/* במובייל – טיפה יותר רחב כדי שיהיה נוח ללחיצה */
-@media (max-width: 767px) {
-  .pl-input[type="number"] {
-    width: 110px;
+/* שיהיה קצת יותר רחב במובייל */
+@media (max-width: 768px) {
+  .pl-row .pl-input[type="number"] {
+    width: 110px !important;
+    max-width: 110px !important;
   }
 }
