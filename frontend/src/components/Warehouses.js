@@ -2,10 +2,15 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api";
 import {
-  Box, Paper, TextField, Button, Typography, Stack, Alert
+  Box,
+  Paper,
+  TextField,
+  Button,
+  Stack,
+  Alert,
 } from "@mui/material";
 
-// סטייל קבוע לשדות טופס ב-RTL (כולל לייבלים)
+// סטייל קבוע לשדות טופס ב־RTL (כולל לייבלים)
 const rtlTextFieldSx = {
   direction: "rtl",
   textAlign: "right",
@@ -23,7 +28,6 @@ const rtlTextFieldSx = {
     transformOrigin: "right top",
     textAlign: "right",
   },
-  // לפעמים האאוטליין וה-legend מתעקשים — מהדקים גם אותם
   "& .MuiOutlinedInput-notchedOutline legend": {
     textAlign: "right",
   },
@@ -96,34 +100,107 @@ export default function Warehouses() {
         fontFamily: "Arial, sans-serif",
       }}
     >
-      <Typography {{style=textAlign:right}} variant="h5" fontWeight="bold" mb={2}>
+      {/* כותרת עליונה */}
+      <h5
+        style={{
+          direction: "rtl",
+          textAlign: "right",
+          fontWeight: "bold",
+          marginBottom: "16px",
+          fontSize: "1.5rem",
+        }}
+      >
         מחסנים
-      </Typography>
+      </h5>
 
       {/* טופס יצירת מחסן */}
-      <Paper sx={{ p: 2, mb: 3 }}>
-         <Typography variant="h6" mb={1}>יצירת מחסן חדש</Typography>
-          <form onSubmit={onCreate}>
-             <Stack spacing={2}> 
-              <TextField label="שם מחסן *" value={name} onChange={(e) => setName(e.target.value)} required inputProps={{ style: { textAlign: "right" } }} /> 
-                <TextField label="כתובת (רשות)" value={address} onChange={(e) => setAddress(e.target.value)} inputProps={{ style: { textAlign: "right" } }} /> 
-                  <TextField label="הערות (רשות)" value={notes} onChange={(e) => setNotes(e.target.value)} multiline minRows={2} inputProps={{ style: { textAlign: "right" } }} /> 
-                    <Button type="submit" variant="contained">צור מחסן</Button>
-                     {err && <Alert severity="error" dir="rtl">{err}</Alert>
-                     } {success && <Alert severity="success" dir="rtl">{success}</Alert>}
-                      </Stack>
-                       </form>
-                       </Paper>
+      <Paper sx={{ p: 2, mb: 3, direction: "rtl" }}>
+        <h6
+          style={{
+            direction: "rtl",
+            textAlign: "right",
+            marginBottom: "8px",
+            fontWeight: 600,
+            fontSize: "1.1rem",
+          }}
+        >
+          יצירת מחסן חדש
+        </h6>
+
+        <form onSubmit={onCreate} dir="rtl">
+          <Stack spacing={2}>
+            <TextField
+              label="שם מחסן *"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              fullWidth
+              sx={rtlTextFieldSx}
+              inputProps={{ dir: "rtl" }}
+            />
+            <TextField
+              label="כתובת (רשות)"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              fullWidth
+              sx={rtlTextFieldSx}
+              inputProps={{ dir: "rtl" }}
+            />
+            <TextField
+              label="הערות (רשות)"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              fullWidth
+              multiline
+              minRows={2}
+              sx={rtlTextFieldSx}
+              inputProps={{ dir: "rtl" }}
+            />
+            <Stack direction="row" justifyContent="flex-end">
+              <Button type="submit" variant="contained">
+                צור מחסן
+              </Button>
+            </Stack>
+            {err && (
+              <Alert severity="error" dir="rtl">
+                {err}
+              </Alert>
+            )}
+            {success && (
+              <Alert severity="success" dir="rtl">
+                {success}
+              </Alert>
+            )}
+          </Stack>
+        </form>
+      </Paper>
+
       {/* רשימת מחסנים – טבלת HTML רגילה */}
       <Paper sx={{ p: 0 }} dir="rtl">
         <div style={{ padding: "12px 16px" }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>רשימת מחסנים</Typography>
+          <h6
+            style={{
+              direction: "rtl",
+              textAlign: "right",
+              fontWeight: 600,
+              fontSize: "1.1rem",
+            }}
+          >
+            רשימת מחסנים
+          </h6>
         </div>
 
         {loading ? (
           <div style={{ padding: "24px", textAlign: "center" }}>טוען…</div>
         ) : list.length === 0 ? (
-          <div style={{ padding: "24px", textAlign: "center", color: "#777" }}>
+          <div
+            style={{
+              padding: "24px",
+              textAlign: "center",
+              color: "#777",
+              direction: "rtl",
+            }}
+          >
             אין מחסנים עדיין
           </div>
         ) : (
@@ -164,7 +241,7 @@ export default function Warehouses() {
   );
 }
 
-// סטיילים לטבלת ה-HTML (ימין לשמאל ויישור לימין)
+// סטיילים לטבלת ה־HTML (ימין לשמאל ויישור לימין)
 const thStyle = {
   textAlign: "right",
   padding: "12px 16px",
