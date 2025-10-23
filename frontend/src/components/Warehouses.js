@@ -96,12 +96,24 @@ export default function Warehouses() {
         fontFamily: "Arial, sans-serif",
       }}
     >
-      <Typography variant="h5" fontWeight="bold" mb={2}>
+      <Typography {{style=textAlign:right}} variant="h5" fontWeight="bold" mb={2}>
         מחסנים
       </Typography>
 
-      {/* טופס יצירת מחסן */} 
-      <Paper sx={{ p: 2, mb: 3 }}> <Typography variant="h6" mb={1}>יצירת מחסן חדש</Typography> <form onSubmit={onCreate}> <Stack spacing={2}> <TextField label="שם מחסן *" value={name} onChange={(e) => setName(e.target.value)} required inputProps={{ style: { textAlign: "right" } }} /> <TextField label="כתובת (רשות)" value={address} onChange={(e) => setAddress(e.target.value)} inputProps={{ style: { textAlign: "right" } }} /> <TextField label="הערות (רשות)" value={notes} onChange={(e) => setNotes(e.target.value)} multiline minRows={2} inputProps={{ style: { textAlign: "right" } }} /> <Button type="submit" variant="contained">צור מחסן</Button> {err && <Alert severity="error" dir="rtl">{err}</Alert>} {success && <Alert severity="success" dir="rtl">{success}</Alert>} </Stack> </form> </Paper>
+      {/* טופס יצירת מחסן */}
+      <Paper sx={{ p: 2, mb: 3 }}>
+         <Typography variant="h6" mb={1}>יצירת מחסן חדש</Typography>
+          <form onSubmit={onCreate}>
+             <Stack spacing={2}> 
+              <TextField label="שם מחסן *" value={name} onChange={(e) => setName(e.target.value)} required inputProps={{ style: { textAlign: "right" } }} /> 
+                <TextField label="כתובת (רשות)" value={address} onChange={(e) => setAddress(e.target.value)} inputProps={{ style: { textAlign: "right" } }} /> 
+                  <TextField label="הערות (רשות)" value={notes} onChange={(e) => setNotes(e.target.value)} multiline minRows={2} inputProps={{ style: { textAlign: "right" } }} /> 
+                    <Button type="submit" variant="contained">צור מחסן</Button>
+                     {err && <Alert severity="error" dir="rtl">{err}</Alert>
+                     } {success && <Alert severity="success" dir="rtl">{success}</Alert>}
+                      </Stack>
+                       </form>
+                       </Paper>
       {/* רשימת מחסנים – טבלת HTML רגילה */}
       <Paper sx={{ p: 0 }} dir="rtl">
         <div style={{ padding: "12px 16px" }}>

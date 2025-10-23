@@ -48,9 +48,6 @@ function AppContent() {
         spacing={1}
         sx={{ mb: 2 }}
       >
-        <Typography variant="h6" sx={{ fontWeight: "bold" }}>
-          ניהול מלאי
-        </Typography>
         <Stack direction="row" spacing={1} alignItems="center">
           <Typography variant="body2" sx={{ color: "text.secondary" }}>
             מחובר כ־ {user.email || user.uid}
