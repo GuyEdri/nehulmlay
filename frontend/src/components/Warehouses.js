@@ -111,65 +111,52 @@ export default function Warehouses() {
           יצירת מחסן חדש
         </Typography>
 
-        <form onSubmit={onCreate} dir="rtl" style={{ direction: "rtl" }}>
-          <Stack spacing={2} sx={{ direction: "rtl" }}>
-            <TextField sx={{textAlign:"right"}}
-              label="שם מחסן *"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              fullWidth
-              sx={rtlTextFieldSx}
-              inputProps={{ dir: "rtl" }}
-              InputLabelProps={{
-                sx: { right: 14, left: "auto", transformOrigin: "right top" },
-              }}
-            />
+        <form onSubmit={onCreate} dir="rtl" style={{ direction: "rtl", textAlign: "right" }}>
+  <Stack spacing={2} sx={{ direction: "rtl", textAlign: "right" }}>
+    <TextField
+      label="שם מחסן *"
+      value={name}
+      onChange={(e) => setName(e.target.value)}
+      required
+      fullWidth
+      sx={rtlTextFieldSx}
+      inputProps={{ dir: "rtl" }}
+      InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
+    />
 
-            <TextField sx={{textAlign:"right"}}
-              label="כתובת (רשות)"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              fullWidth
-              sx={rtlTextFieldSx}
-              inputProps={{ dir: "rtl" }}
-              InputLabelProps={{
-                sx: { right: 14, left: "auto", transformOrigin: "right top" },
-              }}
-            />
+    <TextField
+      label="כתובת (רשות)"
+      value={address}
+      onChange={(e) => setAddress(e.target.value)}
+      fullWidth
+      sx={rtlTextFieldSx}
+      inputProps={{ dir: "rtl" }}
+      InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
+    />
 
-            <TextField sx={{textAlign:"right"}}
-              label="הערות (רשות)"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              fullWidth
-              multiline
-              minRows={2}
-              sx={rtlTextFieldSx}
-              inputProps={{ dir: "rtl" }}
-              InputLabelProps={{
-                sx: { right: 14, left: "auto", transformOrigin: "right top" },
-              }}
-            />
+    <TextField
+      label="הערות (רשות)"
+      value={notes}
+      onChange={(e) => setNotes(e.target.value)}
+      fullWidth
+      multiline
+      minRows={2}
+      sx={rtlTextFieldSx}
+      inputProps={{ dir: "rtl" }}
+      InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
+    />
 
-            <Stack direction="row" justifyContent="flex-end">
-              <Button type="submit" variant="contained">
-                צור מחסן
-              </Button>
-            </Stack>
+    <Stack direction="row" justifyContent="flex-end">
+      <Button type="submit" variant="contained">
+        צור מחסן
+      </Button>
+    </Stack>
 
-            {err && (
-              <Alert severity="error" dir="rtl">
-                {err}
-              </Alert>
-            )}
-            {success && (
-              <Alert severity="success" dir="rtl">
-                {success}
-              </Alert>
-            )}
-          </Stack>
-        </form>
+    {err && <Alert severity="error" dir="rtl">{err}</Alert>}
+    {success && <Alert severity="success" dir="rtl">{success}</Alert>}
+  </Stack>
+</form>
+
       </Paper>
 
       {/* רשימת מחסנים – טבלת HTML רגילה */}
