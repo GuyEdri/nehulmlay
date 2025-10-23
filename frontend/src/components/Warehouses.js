@@ -9,40 +9,33 @@ import {
   Typography,
   Stack,
   Alert,
+  createTheme,
+  ThemeProvider,
 } from "@mui/material";
+import { CacheProvider } from "@emotion/react";
+import createCache from "@emotion/cache";
+import rtlPlugin from "stylis-plugin-rtl";
+import { prefixer } from "stylis";
 
-// סטייל קבוע לשדות טופס ב־RTL (כולל לייבלים)
-const rtlTextFieldSx = {
+// יצירת theme RTL אמיתי עם MUI
+const theme = createTheme({
   direction: "rtl",
-  textAlign: "right",
-  "& .MuiInputBase-root": {
-    direction: "rtl",
-    textAlign: "right",
-  },
-  "& .MuiInputBase-input": {
-    direction: "rtl",
-    textAlign: "right",
-  },
-  "& .MuiFormLabel-root": {
-    right: 14,
-    left: "auto",
-    transformOrigin: "right top",
-    textAlign: "right",
-  },
-  "& .MuiOutlinedInput-notchedOutline legend": {
-    textAlign: "right",
-  },
-};
+  typography: { fontFamily: "Arial, sans-serif" },
+});
+
+// Cache עבור RTL
+const cacheRtl = createCache({
+  key: "mui-rtl",
+  stylisPlugins: [prefixer, rtlPlugin],
+});
 
 export default function Warehouses() {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // שדות לטופס יצירת מחסן
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
-
   const [err, setErr] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -63,21 +56,20 @@ export default function Warehouses() {
   }, []);
 
   const onCreate = async (e) => {
-    e?.preventDefault();
+    e.preventDefault();
     setErr("");
     setSuccess("");
 
-    const cleanName = (name || "").trim();
-    if (!cleanName) {
+    if (!name.trim()) {
       setErr("יש להזין שם מחסן");
       return;
     }
 
     try {
       await api.post("/api/warehouses", {
-        name: cleanName,
-        address: (address || "").trim(),
-        notes: (notes || "").trim(),
+        name: name.trim(),
+        address: address.trim(),
+        notes: notes.trim(),
       });
       setSuccess("המחסן נוצר בהצלחה");
       setName("");
@@ -90,173 +82,168 @@ export default function Warehouses() {
   };
 
   return (
-    <Box
-      dir="rtl"
-      sx={{
-        direction: "rtl",
-        textAlign: "right",
-        p: 3,
-        maxWidth: 900,
-        mx: "auto",
-        fontFamily: "Arial, sans-serif",
-      }}
-    >
-      <Typography sx={{ textAlign:"center" }}variant="h5" fontWeight="bold" mb={2}>
-        מחסנים
-      </Typography>
-
-      {/* טופס יצירת מחסן */}
-      <Paper sx={{textAlign:"right"}} dir="rtl">
-        <Typography sx={{ textAlign:"center" }}variant="h6" mb={1}>
-          יצירת מחסן חדש
-        </Typography>
-
-<form onSubmit={onCreate} dir="rtl" style={{ direction: "rtl", textAlign: "right" }}>
-  <Stack spacing={2} sx={{ direction: "rtl", textAlign: "right" }}>
-    <TextField
-      label="שם מחסן *"
-      value={name}
-      onChange={(e) => setName(e.target.value)}
-      required
-      fullWidth
-      variant="outlined"
-      // RTL מלא ל-input + label:
-      InputProps={{
-        sx: {
-          direction: "rtl",
-          textAlign: "right",
-          "& input": { direction: "rtl", textAlign: "right" },
-        },
-      }}
-      InputLabelProps={{
-        sx: {
-          direction: "rtl",
-          textAlign: "right",
-          left: "auto",
-          right: 14,
-          transformOrigin: "right top",
-          // לפעמים ה-legend מתעקש:
-          "&.MuiInputLabel-outlined": { direction: "rtl" },
-        },
-      }}
-    />
-
-    <TextField
-      label="כתובת (רשות)"
-      value={address}
-      onChange={(e) => setAddress(e.target.value)}
-      fullWidth
-      variant="outlined"
-      InputProps={{
-        sx: {
-          direction: "rtl",
-          textAlign: "right",
-          "& input": { direction: "rtl", textAlign: "right" },
-        },
-      }}
-      InputLabelProps={{
-        sx: {
-          direction: "rtl",
-          textAlign: "right",
-          left: "auto",
-          right: 14,
-          transformOrigin: "right top",
-        },
-      }}
-    />
-
-    <TextField
-      label="הערות (רשות)"
-      value={notes}
-      onChange={(e) => setNotes(e.target.value)}
-      fullWidth
-      multiline
-      minRows={2}
-      variant="outlined"
-      InputProps={{
-        sx: {
-          direction: "rtl",
-          textAlign: "right",
-          "& textarea": { direction: "rtl", textAlign: "right" },
-        },
-      }}
-      InputLabelProps={{
-        sx: {
-          direction: "rtl",
-          textAlign: "right",
-          left: "auto",
-          right: 14,
-          transformOrigin: "right top",
-        },
-      }}
-    />
-
-    <Stack direction="row" justifyContent="flex-end">
-      <Button type="submit" variant="contained">
-        צור מחסן
-      </Button>
-    </Stack>
-
-    {err && <Alert severity="error" dir="rtl">{err}</Alert>}
-    {success && <Alert severity="success" dir="rtl">{success}</Alert>}
-  </Stack>
-</form>
-
-      </Paper>
-
-      {/* רשימת מחסנים – טבלת HTML רגילה */}
-      <Paper sx={{ p: 0 }} dir="rtl">
-        <div style={{ padding: "12px 16px" }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-            רשימת מחסנים
+    <CacheProvider value={cacheRtl}>
+      <ThemeProvider theme={theme}>
+        <Box
+          dir="rtl"
+          sx={{
+            direction: "rtl",
+            textAlign: "right",
+            p: 3,
+            maxWidth: 900,
+            mx: "auto",
+          }}
+        >
+          <Typography variant="h5" fontWeight="bold" mb={2} textAlign="center">
+            מחסנים
           </Typography>
-        </div>
 
-        {loading ? (
-          <div style={{ padding: "24px", textAlign: "center" }}>טוען…</div>
-        ) : list.length === 0 ? (
-          <div style={{ padding: "24px", textAlign: "center", color: "#777" }}>
-            אין מחסנים עדיין
-          </div>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table
-              dir="rtl"
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                tableLayout: "fixed",
-                direction: "rtl",
-              }}
-            >
-              <thead>
-                <tr style={{ backgroundColor: "#f5f5f5" }}>
-                  <th style={thStyle}>שם</th>
-                  <th style={thStyle}>כתובת</th>
-                  <th style={thStyle}>הערות</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((w) => {
-                  const id = String(w._id || w.id);
-                  return (
-                    <tr key={id} style={{ borderTop: "1px solid #eee" }}>
-                      <td style={tdStyle}>{w.name || "(ללא שם)"}</td>
-                      <td style={tdStyle}>{w.address || "—"}</td>
-                      <td style={tdStyle}>{w.notes || "—"}</td>
+          <Paper sx={{ p: 3, mb: 3 }}>
+            <Typography variant="h6" mb={2} textAlign="center">
+              יצירת מחסן חדש
+            </Typography>
+
+            <form onSubmit={onCreate} dir="rtl">
+              <Stack spacing={2}>
+                <TextField
+                  label="שם מחסן *"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  fullWidth
+                  InputProps={{
+                    sx: {
+                      direction: "rtl",
+                      textAlign: "right",
+                      "& input": { textAlign: "right" },
+                    },
+                  }}
+                  InputLabelProps={{
+                    sx: {
+                      direction: "rtl",
+                      textAlign: "right",
+                      right: 14,
+                      left: "auto",
+                      transformOrigin: "right top",
+                    },
+                  }}
+                />
+
+                <TextField
+                  label="כתובת (רשות)"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  fullWidth
+                  InputProps={{
+                    sx: {
+                      direction: "rtl",
+                      textAlign: "right",
+                      "& input": { textAlign: "right" },
+                    },
+                  }}
+                  InputLabelProps={{
+                    sx: {
+                      direction: "rtl",
+                      textAlign: "right",
+                      right: 14,
+                      left: "auto",
+                      transformOrigin: "right top",
+                    },
+                  }}
+                />
+
+                <TextField
+                  label="הערות (רשות)"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  fullWidth
+                  multiline
+                  minRows={2}
+                  InputProps={{
+                    sx: {
+                      direction: "rtl",
+                      textAlign: "right",
+                      "& textarea": { textAlign: "right" },
+                    },
+                  }}
+                  InputLabelProps={{
+                    sx: {
+                      direction: "rtl",
+                      textAlign: "right",
+                      right: 14,
+                      left: "auto",
+                      transformOrigin: "right top",
+                    },
+                  }}
+                />
+
+                <Stack direction="row" justifyContent="flex-end">
+                  <Button type="submit" variant="contained">
+                    צור מחסן
+                  </Button>
+                </Stack>
+
+                {err && <Alert severity="error">{err}</Alert>}
+                {success && <Alert severity="success">{success}</Alert>}
+              </Stack>
+            </form>
+          </Paper>
+
+          {/* רשימת מחסנים – טבלת HTML רגילה */}
+          <Paper sx={{ p: 0 }}>
+            <div style={{ padding: "12px 16px" }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                רשימת מחסנים
+              </Typography>
+            </div>
+
+            {loading ? (
+              <div style={{ padding: "24px", textAlign: "center" }}>טוען…</div>
+            ) : list.length === 0 ? (
+              <div style={{ padding: "24px", textAlign: "center", color: "#777" }}>
+                אין מחסנים עדיין
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table
+                  dir="rtl"
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    tableLayout: "fixed",
+                    direction: "rtl",
+                  }}
+                >
+                  <thead>
+                    <tr style={{ backgroundColor: "#f5f5f5" }}>
+                      <th style={thStyle}>שם</th>
+                      <th style={thStyle}>כתובת</th>
+                      <th style={thStyle}>הערות</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Paper>
-    </Box>
+                  </thead>
+                  <tbody>
+                    {list.map((w) => {
+                      const id = String(w._id || w.id);
+                      return (
+                        <tr key={id} style={{ borderTop: "1px solid #eee" }}>
+                          <td style={tdStyle}>{w.name || "(ללא שם)"}</td>
+                          <td style={tdStyle}>{w.address || "—"}</td>
+                          <td style={tdStyle}>{w.notes || "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Paper>
+        </Box>
+      </ThemeProvider>
+    </CacheProvider>
   );
 }
 
-// סטיילים לטבלת ה־HTML (ימין לשמאל ויישור לימין)
+// סטיילים לטבלה
 const thStyle = {
   textAlign: "right",
   padding: "12px 16px",
@@ -271,4 +258,3 @@ const tdStyle = {
   verticalAlign: "top",
   wordBreak: "break-word",
 };
-
