@@ -2,27 +2,49 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 
-export default function AddReturn({ onCreated }) {
+export default function AddReturn({ onCreated, prefill }) {
+  // מצב כללי/שגיאות
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+
+  // מחסנים + בחירת יעד
   const [warehouses, setWarehouses] = useState([]);
   const [warehouseId, setWarehouseId] = useState("");
+
+  // לקוחות + בחירה
   const [customers, setCustomers] = useState([]);
   const [customerId, setCustomerId] = useState("");
   const [customerName, setCustomerName] = useState("");
+
+  // מי החזיר, תאריך, מספר אישי והערות
   const [returnedBy, setReturnedBy] = useState("");
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 16));
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 16)); // input[type=datetime-local]
   const [personalNumber, setPersonalNumber] = useState("");
   const [notes, setNotes] = useState("");
+
+  // שורות פריטים לזיכוי
   const [rows, setRows] = useState([
-    { productId: "", productLabel: "", searchTerm: "", suggestions: [], quantity: 1, manualSku: "", manualName: "" },
+    {
+      productId: "",
+      productLabel: "",
+      searchTerm: "",
+      suggestions: [],
+      quantity: 1,
+      manualSku: "",
+      manualName: "",
+    },
   ]);
 
+  // חתימה
   const [signature, setSignature] = useState("");
   const canvasRef = useRef(null);
   const drawing = useRef(false);
 
+  // האם הוחל prefill כבר
+  const prefillAppliedRef = useRef(false);
+
+  // --- טעינת מחסנים/לקוחות ---
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -33,24 +55,63 @@ export default function AddReturn({ onCreated }) {
         ]);
         if (!mounted) return;
         setWarehouses(Array.isArray(whRes.data) ? whRes.data : []);
-        const custs = Array.isArray(custRes.data) ? custRes.data : [];
-        setCustomers(custs);
-      } catch {
+        setCustomers(Array.isArray(custRes.data) ? custRes.data : []);
+      } catch (e) {
         if (!mounted) return;
         setWarehouses([]);
         setCustomers([]);
       }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
+  // אם נבחר לקוח — נעדכן גם שם (כדי לשמור תאום בין id ↔ name)
   useEffect(() => {
     if (!customerId) return setCustomerName("");
     const c = customers.find((x) => String(x.id || x._id) === String(customerId));
     setCustomerName(c?.name || "");
   }, [customerId, customers]);
 
-  const timers = useRef({});
+  // --- החלת PRE-FILL אחרי שהנתונים נטענו (חד-פעמי) ---
+  useEffect(() => {
+    if (prefillAppliedRef.current) return; // כבר הוחל
+    if (!prefill) return;                  // אין מה להחיל
+    // ננסה להחיל רק אחרי שיש לנו את רשימות המחסנים/לקוחות (כדי שערכי select יהיו קיימים)
+    const warehousesReady = Array.isArray(warehouses);
+    const customersReady = Array.isArray(customers);
+    if (!warehousesReady || !customersReady) return;
+
+    // החלת שדות עליונים
+    if (prefill.warehouseId !== undefined) setWarehouseId(String(prefill.warehouseId || ""));
+    if (prefill.customerId !== undefined) setCustomerId(String(prefill.customerId || ""));
+    if (prefill.customerName !== undefined) setCustomerName(String(prefill.customerName || ""));
+    if (prefill.returnedBy !== undefined) setReturnedBy(String(prefill.returnedBy || ""));
+    if (prefill.date !== undefined) setDate(prefill.date || new Date().toISOString().slice(0, 16));
+    if (prefill.personalNumber !== undefined) setPersonalNumber(String(prefill.personalNumber || ""));
+    if (prefill.notes !== undefined) setNotes(String(prefill.notes || ""));
+
+    // שורות פריטים (אם נשלחו)
+    if (Array.isArray(prefill.rows) && prefill.rows.length > 0) {
+      setRows(
+        prefill.rows.map((r) => ({
+          productId: String(r.productId || ""),
+          productLabel: String(r.productLabel || ""),
+          searchTerm: String(r.searchTerm || r.productLabel || ""),
+          suggestions: [],
+          quantity: Number(r.quantity || 1),
+          manualSku: String(r.manualSku || ""),
+          manualName: String(r.manualName || ""),
+        }))
+      );
+    }
+
+    prefillAppliedRef.current = true;
+  }, [prefill, warehouses, customers]);
+
+  // --- חיפוש מוצרים עם debounce קצר ---
+  const timers = useRef({}); // { idx: timeoutId }
 
   const searchProducts = async (idx, term) => {
     try {
@@ -84,14 +145,25 @@ export default function AddReturn({ onCreated }) {
   };
 
   const addRow = () => {
-    setRows((prev) => [...prev, { productId: "", productLabel: "", searchTerm: "", suggestions: [], quantity: 1, manualSku: "", manualName: "" }]);
+    setRows((prev) => [
+      ...prev,
+      {
+        productId: "",
+        productLabel: "",
+        searchTerm: "",
+        suggestions: [],
+        quantity: 1,
+        manualSku: "",
+        manualName: "",
+      },
+    ]);
   };
 
   const removeRow = (idx) => {
     setRows((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  // ציור חתימה
+  // --- חתימה על קנבס ---
   const getPos = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -131,44 +203,68 @@ export default function AddReturn({ onCreated }) {
     setSignature("");
   };
 
+  // --- שליחה ---
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg("");
     setSuccessMsg("");
 
-    if (!customerId || !customerName) return setErrorMsg("יש לבחור לקוח");
-    if (!returnedBy.trim()) return setErrorMsg("יש למלא 'הוחזר ע\"י'");
-    if (!rows.length) return setErrorMsg("יש להוסיף לפחות פריט אחד");
+    // ולידציות בסיסיות
+    if (!customerId || !customerName) {
+      return setErrorMsg("יש לבחור לקוח");
+    }
+    if (!returnedBy.trim()) {
+      return setErrorMsg("יש למלא 'הוחזר ע\"י'");
+    }
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return setErrorMsg("יש להוסיף לפחות פריט אחד");
+    }
 
+    // לבנות items לשרת:
     const itemsToSend = [];
     for (const r of rows) {
       const qty = Number(r.quantity);
-      if (!Number.isFinite(qty) || qty < 1) return setErrorMsg("כמות חייבת להיות חיובית");
-      if (r.productId) itemsToSend.push({ product: String(r.productId), quantity: qty });
-      else if ((r.manualSku || "").trim())
-        itemsToSend.push({ sku: r.manualSku.trim().toUpperCase(), name: r.manualName.trim(), quantity: qty });
-      else return setErrorMsg("כל פריט חייב מוצר או SKU ידני");
+      if (!Number.isFinite(qty) || qty < 1) {
+        return setErrorMsg("כמות חייבת להיות מספר חיובי בכל פריט");
+      }
+      if (r.productId) {
+        itemsToSend.push({ product: String(r.productId), quantity: qty });
+      } else if ((r.manualSku || "").trim()) {
+        itemsToSend.push({
+          sku: String(r.manualSku).trim().toUpperCase(),
+          name: String(r.manualName || "").trim(),
+          quantity: qty,
+        });
+      } else {
+        return setErrorMsg("כל פריט חייב להיות בחירה מרשימה או להכניס SKU ידני");
+      }
     }
 
+    // אם יש פריט ידני — מומלץ לבחור מחסן יעד
     const hasManual = itemsToSend.some((it) => it.sku && !it.product);
-    if (hasManual && !warehouseId) return setErrorMsg("יש לבחור מחסן יעד עבור פריטים ידניים");
+    if (hasManual && !String(warehouseId || "").trim()) {
+      return setErrorMsg("יש לבחור מחסן יעד עבור פריטים ידניים (SKU)");
+    }
 
     try {
       setLoading(true);
       const body = {
-        warehouseId,
-        customer: customerId,
-        customerName,
-        returnedBy,
+        warehouseId: String(warehouseId || "").trim(),
+        customer: String(customerId),
+        customerName: String(customerName).trim(),
+        returnedBy: String(returnedBy).trim(),
         items: itemsToSend,
-        date: new Date(date).toISOString(),
-        personalNumber,
-        notes,
+        date: date ? new Date(date).toISOString() : undefined,
+        personalNumber: personalNumber ? String(personalNumber) : "",
+        notes: String(notes || ""),
         ...(signature ? { signature } : {}),
       };
+
       const res = await api.post("/api/returns", body);
+
       setSuccessMsg("הזיכוי נשמר בהצלחה ✅");
-      // reset
+
+      // איפוס טופס
       setWarehouseId("");
       setCustomerId("");
       setCustomerName("");
@@ -176,8 +272,19 @@ export default function AddReturn({ onCreated }) {
       setPersonalNumber("");
       setNotes("");
       setDate(new Date().toISOString().slice(0, 16));
-      setRows([{ productId: "", productLabel: "", searchTerm: "", suggestions: [], quantity: 1, manualSku: "", manualName: "" }]);
+      setRows([
+        {
+          productId: "",
+          productLabel: "",
+          searchTerm: "",
+          suggestions: [],
+          quantity: 1,
+          manualSku: "",
+          manualName: "",
+        },
+      ]);
       clearSignature();
+
       if (onCreated) onCreated(res.data);
     } catch (err) {
       setErrorMsg(err?.response?.data?.error || "שגיאה בשמירת הזיכוי");
@@ -187,16 +294,7 @@ export default function AddReturn({ onCreated }) {
   };
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      style={{
-        maxWidth: 820,
-        margin: "auto",
-        direction: "rtl",
-        textAlign: "right",
-        fontFamily: "Arial, sans-serif",
-      }}
-    >
+    <form onSubmit={handleSubmit} style={{ maxWidth: 820, margin: "auto", direction: "rtl", textAlign: "right", fontFamily: "Arial, sans-serif" }}>
       <h2 style={{ textAlign: "center" }}>זיכוי מלאי</h2>
 
       {/* מחסן יעד */}
@@ -215,15 +313,7 @@ export default function AddReturn({ onCreated }) {
       </select>
 
       {/* לקוח + מי החזיר + תאריך */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 10,
-          direction: "rtl",
-          textAlign: "right",
-        }}
-      >
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <div>
           <label>לקוח</label>
           <select
@@ -303,7 +393,7 @@ export default function AddReturn({ onCreated }) {
                     return next;
                   });
 
-                  if (val.trim().length >= 2) {
+                  if ((val || "").trim().length >= 2) {
                     if (timers.current[idx]) clearTimeout(timers.current[idx]);
                     timers.current[idx] = setTimeout(() => searchProducts(idx, val.trim()), 250);
                   } else {
@@ -317,6 +407,7 @@ export default function AddReturn({ onCreated }) {
                 style={{ width: "100%", padding: 8, marginBottom: 6, textAlign: "right" }}
               />
 
+              {/* הצעות */}
               {row.suggestions.length > 0 && (
                 <div style={{ border: "1px solid #ccc", borderRadius: 4, maxHeight: 160, overflowY: "auto" }}>
                   {row.suggestions.map((p) => (
@@ -334,6 +425,7 @@ export default function AddReturn({ onCreated }) {
                 </div>
               )}
 
+              {/* כניסה ידנית (אם אין productId) */}
               {!row.productId && (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
                   <input
@@ -363,6 +455,7 @@ export default function AddReturn({ onCreated }) {
                 </div>
               )}
 
+              {/* תצוגה כאשר נבחר מוצר */}
               {row.productId && (
                 <div style={{ fontSize: 12, color: "#444", marginTop: 4, textAlign: "right" }}>
                   נבחר: {row.productLabel}
@@ -430,6 +523,7 @@ export default function AddReturn({ onCreated }) {
         </div>
       </div>
 
+      {/* כפתור שמירה */}
       <button
         type="submit"
         disabled={loading}
@@ -451,4 +545,3 @@ export default function AddReturn({ onCreated }) {
     </form>
   );
 }
-
