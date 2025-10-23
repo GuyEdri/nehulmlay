@@ -113,7 +113,7 @@ export default function Warehouses() {
 
         <form onSubmit={onCreate} dir="rtl" style={{ direction: "rtl" }}>
           <Stack spacing={2} sx={{ direction: "rtl" }}>
-            <TextField
+            <TextField sx={{textAlign:"right"}}
               label="שם מחסן *"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -126,7 +126,7 @@ export default function Warehouses() {
               }}
             />
 
-            <TextField
+            <TextField sx={{textAlign:"right"}}
               label="כתובת (רשות)"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
@@ -138,7 +138,7 @@ export default function Warehouses() {
               }}
             />
 
-            <TextField
+            <TextField sx={{textAlign:"right"}}
               label="הערות (רשות)"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
