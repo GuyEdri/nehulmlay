@@ -111,7 +111,7 @@ export default function Warehouses() {
           יצירת מחסן חדש
         </Typography>
 
-        <form onSubmit={onCreate} dir="rtl" style={{ direction: "rtl", textAlign: "right" }}>
+<form onSubmit={onCreate} dir="rtl" style={{ direction: "rtl", textAlign: "right" }}>
   <Stack spacing={2} sx={{ direction: "rtl", textAlign: "right" }}>
     <TextField
       label="שם מחסן *"
@@ -119,8 +119,9 @@ export default function Warehouses() {
       onChange={(e) => setName(e.target.value)}
       required
       fullWidth
+      // אל תשים כאן sx שני. השתמש רק בזה:
       sx={rtlTextFieldSx}
-      inputProps={{ dir: "rtl" }}
+      inputProps={{ dir: "rtl", style: { textAlign: "right" } }}
       InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
     />
 
@@ -130,7 +131,7 @@ export default function Warehouses() {
       onChange={(e) => setAddress(e.target.value)}
       fullWidth
       sx={rtlTextFieldSx}
-      inputProps={{ dir: "rtl" }}
+      inputProps={{ dir: "rtl", style: { textAlign: "right" } }}
       InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
     />
 
@@ -142,21 +143,18 @@ export default function Warehouses() {
       multiline
       minRows={2}
       sx={rtlTextFieldSx}
-      inputProps={{ dir: "rtl" }}
+      inputProps={{ dir: "rtl", style: { textAlign: "right" } }}
       InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
     />
 
     <Stack direction="row" justifyContent="flex-end">
-      <Button type="submit" variant="contained">
-        צור מחסן
-      </Button>
+      <Button type="submit" variant="contained">צור מחסן</Button>
     </Stack>
 
     {err && <Alert severity="error" dir="rtl">{err}</Alert>}
     {success && <Alert severity="success" dir="rtl">{success}</Alert>}
   </Stack>
 </form>
-
       </Paper>
 
       {/* רשימת מחסנים – טבלת HTML רגילה */}
