@@ -30,6 +30,7 @@ export default function ProductsList() {
 
   const pid = (p) => String(p._id || p.id);
 
+  // --- מחסנים ---
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -61,6 +62,7 @@ export default function ProductsList() {
     return whMap.get(key) || key;
   };
 
+  // --- טעינת מוצרים + סינון/חיפוש ---
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
@@ -141,21 +143,23 @@ export default function ProductsList() {
 
   const noResults = useMemo(() => !loading && products.length === 0, [loading, products]);
 
+  // --- פקדי שינוי מלאי (מותאם RTL) ---
   const StockAdjustControls = ({ id }) => {
     const value = deltas[id] ?? "";
     const busy = !!rowBusy[id];
 
     return (
-      <Stack direction="row" spacing={1} alignItems="center">
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ width: "100%", justifyContent: { xs: "space-between", sm: "flex-start" } }}>
         <TextField
           size="small"
           type="number"
           value={value}
           onChange={(e) => setDelta(id, e.target.value)}
           placeholder="שינוי מלאי (למשל 5 או -3)"
-          sx={{ width: 180 }}
-          inputProps={{ style: { textAlign: "center" } }}
-          InputProps={{ startAdornment: <InputAdornment position="start">Δ</InputAdornment> }}
+          sx={{ width: { xs: "100%", sm: 200 } }}
+          inputProps={{ style: { textAlign: "right" }, dir: "rtl" }}
+          // ב־RTL עדיף האייקון בסוף
+          InputProps={{ endAdornment: <InputAdornment position="end">Δ</InputAdornment> }}
           disabled={busy}
         />
         <Tooltip title="עדכן מלאי (תוספת/הפחתה)">
@@ -175,10 +179,23 @@ export default function ProductsList() {
     );
   };
 
-  const WarehouseSelectCell = ({ value, onChange, disabled }) => {
+  // --- תא בחירת מחסן (RTL מלא כולל התפריט) ---
+  const WarehouseSelectCell = ({ value, onChange, disabled, fullWidth = false }) => {
     return (
-      <FormControl size="small" sx={{ minWidth: 160 }}>
-        <Select value={value || ""} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
+      <FormControl size="small" sx={{ minWidth: fullWidth ? "100%" : 160, direction: "rtl" }} fullWidth={fullWidth}>
+        <Select
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          displayEmpty
+          sx={{ direction: "rtl", textAlign: "right" }}
+          MenuProps={{
+            // RTL לתפריט עצמו
+            PaperProps: { sx: { direction: "rtl" } },
+            anchorOrigin: { vertical: "bottom", horizontal: "right" },
+            transformOrigin: { vertical: "top", horizontal: "right" },
+          }}
+        >
           <MenuItem value="">ללא שיוך</MenuItem>
           {warehouses.map(w => (
             <MenuItem key={w._id || w.id} value={String(w._id || w.id)}>
@@ -191,23 +208,29 @@ export default function ProductsList() {
   };
 
   return (
-    <Box sx={{ direction: "rtl", textAlign: "right", p: 2 }}>
+    <Box sx={{ direction: "rtl", textAlign: "right", p: { xs: 1.5, sm: 2 } }}>
       {/* פס עליון */}
       <Stack
         direction={{ xs: "column", sm: "row" }}
-        spacing={2}
+        spacing={1.5}
         alignItems={{ xs: "stretch", sm: "center" }}
         mb={2}
       >
-        <Typography variant="h5" fontWeight="bold" sx={{ flex: 1 }}>
+        <Typography variant="h5" fontWeight="bold" sx={{ flex: 1, textAlign: { xs: "center", sm: "right" } }}>
           רשימת מוצרים
         </Typography>
 
-        <FormControl size="small" sx={{ minWidth: 180 }}>
+        <FormControl size="small" sx={{ minWidth: 180, direction: "rtl" }}>
           <Select
             value={selectedWarehouse}
             onChange={(e) => setSelectedWarehouse(e.target.value)}
             displayEmpty
+            sx={{ direction: "rtl", textAlign: "right" }}
+            MenuProps={{
+              PaperProps: { sx: { direction: "rtl" } },
+              anchorOrigin: { vertical: "bottom", horizontal: "right" },
+              transformOrigin: { vertical: "top", horizontal: "right" },
+            }}
           >
             <MenuItem value="">
               <em>כל המחסנים</em>
@@ -226,11 +249,11 @@ export default function ProductsList() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           sx={{ minWidth: { xs: "100%", sm: 280 } }}
-          inputProps={{ style: { textAlign: "right" } }}
+          inputProps={{ style: { textAlign: "right" }, dir: "rtl" }}
         />
       </Stack>
 
-      {/* מובייל */}
+      {/* מובייל — כרטיסים רספונסיביים */}
       {isMobile ? (
         <Stack spacing={1}>
           {loading && <Typography>טוען...</Typography>}
@@ -242,53 +265,70 @@ export default function ProductsList() {
             const busy = !!rowBusy[id];
 
             return (
-              <Paper key={id} elevation={2} sx={{ p: 1.5 }}>
-                <Stack direction="row" alignItems="center" spacing={1} justifyContent="space-between">
-                  <Stack spacing={0.3} sx={{ flex: 1 }}>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <InventoryIcon fontSize="small" />
-                      <Typography fontWeight="bold">{p.name}</Typography>
-                    </Stack>
-                    <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
-                      מקט: <b>{p.sku || "—"}</b>
-                    </Typography>
-                    {p.description && (
-                      <Typography variant="body2" color="text.secondary">
-                        {p.description}
-                      </Typography>
-                    )}
-                    <Typography variant="body2">
-                      כמות במלאי: <b>{busy ? "…" : p.stock}</b>
-                    </Typography>
-
-                    <Typography variant="body2" sx={{ mt: 0.5 }}>
-                      מחסן: <b>{getWhName(p.warehouseId)}</b>
-                    </Typography>
-                    <WarehouseSelectCell
-                      value={p.warehouseId}
-                      onChange={(wid) => handleChangeWarehouse(id, wid)}
-                      disabled={busy}
-                    />
-                  </Stack>
-
+              <Paper
+                key={id}
+                elevation={1}
+                sx={{
+                  p: 1.25,
+                  direction: "rtl",
+                  "& *": { direction: "rtl" },
+                }}
+              >
+                {/* כותרת הכרטיס */}
+                <Stack spacing={0.5} sx={{ mb: 1 }}>
                   <Stack direction="row" spacing={1} alignItems="center">
-                    <IconButton aria-label="היסטוריה" onClick={() => handleShowHistory(id)} size="small">
-                      <HistoryIcon />
-                    </IconButton>
-                    <IconButton
-                      aria-label="מחק"
-                      onClick={() => handleDelete(id)}
-                      color="error"
-                      size="small"
-                    >
-                      <DeleteIcon />
-                    </IconButton>
+                    <InventoryIcon fontSize="small" />
+                    <Typography fontWeight="bold">{p.name}</Typography>
                   </Stack>
+                  <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
+                    מקט: <b>{p.sku || "—"}</b>
+                  </Typography>
+                  {p.description && (
+                    <Typography variant="body2" color="text.secondary">
+                      {p.description}
+                    </Typography>
+                  )}
                 </Stack>
 
-                <Divider sx={{ my: 1 }} />
+                {/* שורה: מחסן + כמות */}
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                  <Typography variant="body2" sx={{ whiteSpace: "nowrap" }}>מחסן:</Typography>
+                  <WarehouseSelectCell
+                    value={p.warehouseId}
+                    onChange={(wid) => handleChangeWarehouse(id, wid)}
+                    disabled={busy}
+                    fullWidth
+                  />
+                </Stack>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  כמות במלאי: <b>{busy ? "…" : p.stock}</b>
+                </Typography>
+
+                {/* שינוי מלאי */}
                 <StockAdjustControls id={id} />
 
+                {/* פעולות */}
+                <Stack direction="row" spacing={1} alignItems="center" justifyContent="flex-start" sx={{ mt: 1 }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => handleShowHistory(id)}
+                    startIcon={<HistoryIcon />}
+                  >
+                    {open ? "הסתר היסטוריה" : "הצג היסטוריה"}
+                  </Button>
+                  <Button
+                    size="small"
+                    color="error"
+                    variant="outlined"
+                    startIcon={<DeleteIcon />}
+                    onClick={() => handleDelete(id)}
+                  >
+                    מחק
+                  </Button>
+                </Stack>
+
+                {/* היסטוריה */}
                 {open && (
                   <>
                     <Divider sx={{ my: 1 }} />
@@ -300,29 +340,28 @@ export default function ProductsList() {
           })}
         </Stack>
       ) : (
-        // דסקטופ
+        // דסקטופ — טבלה RTL מלאה
         <TableContainer component={Paper} elevation={2}>
-          {/* dir=rtl כדי שלא יתהפך סדר/יישור בעזרת הפלאגין */}
           <Table dir="rtl">
             <TableHead>
               <TableRow>
-                <TableCell style={{ textAlign: "right", width: "10%" }}>מקט</TableCell>
-                <TableCell style={{ textAlign: "right", width: "18%" }}>שם</TableCell>
-                <TableCell style={{ textAlign: "right", width: "26%" }}>תיאור</TableCell>
-                <TableCell style={{ textAlign: "right", width: "8%" }}>כמות</TableCell>
-                <TableCell style={{ textAlign: "right", width: "16%" }}>מחסן</TableCell>
-                <TableCell style={{ textAlign: "right", width: "22%" }}>שינוי מלאי (Δ)</TableCell>
+                <TableCell align="right" sx={{ width: "10%" }}>מקט</TableCell>
+                <TableCell align="right" sx={{ width: "18%" }}>שם</TableCell>
+                <TableCell align="right" sx={{ width: "26%" }}>תיאור</TableCell>
+                <TableCell align="right" sx={{ width: "8%" }}>כמות</TableCell>
+                <TableCell align="right" sx={{ width: "16%" }}>מחסן</TableCell>
+                <TableCell align="right" sx={{ width: "22%" }}>שינוי מלאי (Δ)</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={6} style={{ textAlign: "center" }}>טוען...</TableCell>
+                  <TableCell colSpan={6} align="center">טוען...</TableCell>
                 </TableRow>
               )}
               {noResults && (
                 <TableRow>
-                  <TableCell colSpan={6} style={{ textAlign: "center", color: "rgba(0,0,0,0.6)" }}>
+                  <TableCell colSpan={6} align="center" sx={{ color: "text.secondary" }}>
                     לא נמצאו מוצרים
                   </TableCell>
                 </TableRow>
@@ -334,17 +373,17 @@ export default function ProductsList() {
                 return (
                   <React.Fragment key={id}>
                     <TableRow hover>
-                      <TableCell style={{ textAlign: "right", fontFamily: "monospace" }}>
+                      <TableCell align="right" sx={{ fontFamily: "monospace" }}>
                         {p.sku || "—"}
                       </TableCell>
-                      <TableCell style={{ textAlign: "right" }}>{p.name}</TableCell>
-                      <TableCell style={{ textAlign: "right", color: "rgba(0,0,0,0.6)" }}>
+                      <TableCell align="right">{p.name}</TableCell>
+                      <TableCell align="right" sx={{ color: "text.secondary" }}>
                         {p.description}
                       </TableCell>
-                      <TableCell style={{ textAlign: "right" }}><b>{busy ? "…" : p.stock}</b></TableCell>
+                      <TableCell align="right"><b>{busy ? "…" : p.stock}</b></TableCell>
 
-                      <TableCell style={{ textAlign: "right" }}>
-                        <Stack direction="row" spacing={1} alignItems="center" justifyContent="flex-end">
+                      <TableCell align="right">
+                        <Stack direction="row" spacing={1} alignItems="center" justifyContent="flex-end" sx={{ direction: "rtl" }}>
                           <Typography variant="body2">{getWhName(p.warehouseId)}</Typography>
                           <WarehouseSelectCell
                             value={p.warehouseId}
@@ -354,8 +393,8 @@ export default function ProductsList() {
                         </Stack>
                       </TableCell>
 
-                      <TableCell style={{ textAlign: "right" }}>
-                        <Stack direction="row" spacing={1} justifyContent="flex-end" alignItems="center">
+                      <TableCell align="right">
+                        <Stack direction="row" spacing={1} justifyContent="flex-end" alignItems="center" sx={{ direction: "rtl" }}>
                           <StockAdjustControls id={id} />
                           <Tooltip title={selectedProduct === id ? "הסתר היסטוריה" : "הצג היסטוריה"}>
                             <Button size="small" onClick={() => handleShowHistory(id)}>
@@ -373,7 +412,7 @@ export default function ProductsList() {
 
                     {selectedProduct === id && (
                       <TableRow>
-                        <TableCell colSpan={6} style={{ background: "#fafafa" }}>
+                        <TableCell colSpan={6} sx={{ background: "#fafafa" }}>
                           <ProductHistory productId={id} />
                         </TableCell>
                       </TableRow>
@@ -388,4 +427,3 @@ export default function ProductsList() {
     </Box>
   );
 }
-
