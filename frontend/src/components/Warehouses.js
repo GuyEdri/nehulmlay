@@ -106,7 +106,7 @@ export default function Warehouses() {
       </Typography>
 
       {/* טופס יצירת מחסן */}
-      <Paper sx={{textAlign:right}} dir="rtl">
+      <Paper sx={{textAlign:"right"}} dir="rtl">
         <Typography sx={{ textAlign:"center" }}variant="h6" mb={1}>
           יצירת מחסן חדש
         </Typography>
