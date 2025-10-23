@@ -1,15 +1,10 @@
-// frontend/src/components/DeliveriesList.js
 import React, { useEffect, useState, useMemo } from "react";
-import {
-  Box, Button, Typography, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Paper, Stack, Divider, FormControl, InputLabel, Select, MenuItem,
-  IconButton
-} from "@mui/material";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import _ from "lodash";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import { api } from "../api";
+import "./deliveries-list.css"; // נוסיף CSS משלנו
 
 // --- עזר להמרת תאריכים ---
 const toDate = (date) => {
@@ -39,30 +34,30 @@ const formatDate = (date) => {
   });
 };
 
-// טבלת פריטים מינימלית (מימין לשמאל)
+// טבלת פריטים קטנה
 function ItemsMiniTable({ items, getName, getSku }) {
   if (!Array.isArray(items) || items.length === 0)
-    return <Typography variant="body2" color="text.secondary">—</Typography>;
+    return <div className="dl-empty">—</div>;
 
   return (
-    <Table size="small" sx={{ direction: "rtl" }} dir="rtl">
-      <TableHead>
-        <TableRow>
-          <TableCell align="right">מקט</TableCell>
-          <TableCell align="right">שם מוצר</TableCell>
-          <TableCell align="right">כמות</TableCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
+    <table className="dl-items-table" dir="rtl">
+      <thead>
+        <tr>
+          <th>מקט</th>
+          <th>שם מוצר</th>
+          <th>כמות</th>
+        </tr>
+      </thead>
+      <tbody>
         {items.map((it, i) => (
-          <TableRow key={i}>
-            <TableCell align="right">{getSku(it.product) || "—"}</TableCell>
-            <TableCell align="right">{getName(it.product)}</TableCell>
-            <TableCell align="right">{it.quantity}</TableCell>
-          </TableRow>
+          <tr key={i}>
+            <td>{getSku(it.product) || "—"}</td>
+            <td>{getName(it.product)}</td>
+            <td>{it.quantity}</td>
+          </tr>
         ))}
-      </TableBody>
-    </Table>
+      </tbody>
+    </table>
   );
 }
 
@@ -72,23 +67,19 @@ export default function DeliveriesList() {
   const [selectedCustomer, setSelectedCustomer] = useState("");
 
   useEffect(() => {
-    let mounted = true;
     (async () => {
       try {
         const [delsRes, prodsRes] = await Promise.all([
           api.get("/api/deliveries"),
           api.get("/api/products"),
         ]);
-        if (!mounted) return;
         setDeliveries(Array.isArray(delsRes.data) ? delsRes.data : []);
         setProducts(Array.isArray(prodsRes.data) ? prodsRes.data : []);
       } catch {
-        if (!mounted) return;
         setDeliveries([]);
         setProducts([]);
       }
     })();
-    return () => { mounted = false; };
   }, []);
 
   const productMap = useMemo(() => {
@@ -163,101 +154,72 @@ export default function DeliveriesList() {
   };
 
   return (
-    <Box
-      sx={{
-        direction: "rtl",
-        p: 3,
-        maxWidth: 1000,
-        margin: "auto",
-        textAlign: "right",
-        fontFamily: "Arial, sans-serif",
-      }}
-      dir="rtl"
-    >
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
-        <Typography variant="h4" fontWeight="bold">
-          רשימת ניפוקים לפי לקוח
-        </Typography>
-        <Button variant="contained" color="primary" onClick={exportToExcel}>
-          ייצוא לאקסל
-        </Button>
-      </Stack>
+    <div className="dl-root" dir="rtl">
+      <div className="dl-header">
+        <h2>רשימת ניפוקים לפי לקוח</h2>
+        <button className="dl-btn primary" onClick={exportToExcel}>ייצוא לאקסל</button>
+      </div>
 
-      <FormControl sx={{ minWidth: 220, mb: 2, textAlign: "right" }} dir="rtl">
-        <InputLabel id="customer-filter-label">סנן לפי לקוח</InputLabel>
-        <Select
-          labelId="customer-filter-label"
+      <div className="dl-filter">
+        <label>סנן לפי לקוח:</label>
+        <select
+          className="dl-select"
           value={selectedCustomer}
-          label="סנן לפי לקוח"
           onChange={(e) => setSelectedCustomer(e.target.value)}
-          sx={{ direction: "rtl", textAlign: "right" }}
-          dir="rtl"
         >
-          <MenuItem value="">הצג הכל</MenuItem>
+          <option value="">הצג הכל</option>
           {customerOptions.map((cn) => (
-            <MenuItem value={cn} key={cn}>
-              {cn}
-            </MenuItem>
+            <option value={cn} key={cn}>{cn}</option>
           ))}
-        </Select>
-      </FormControl>
-
-      <Divider sx={{ mb: 2 }} />
-
-      {groupedAndSorted.map((group) => (
-        <Box key={group.customerName} mb={4} sx={{ textAlign: "right" }} dir="rtl">
-          <Typography variant="h6" color="primary" mb={1}>
-            {group.customerName}
-          </Typography>
-
-          <TableContainer component={Paper} elevation={2} sx={{ direction: "rtl" }} dir="rtl">
-            <Table sx={{ direction: "rtl" }} dir="rtl">
-              <TableHead>
-                <TableRow>
-                  <TableCell align="right">תאריך</TableCell>
-                  <TableCell align="right">למי נופק</TableCell>
-                  <TableCell align="right">פריטים (מקט | שם מוצר | כמות)</TableCell>
-                  <TableCell align="right">חתימה</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {group.deliveries.map((delivery, idx) => {
-                  const key = delivery._id || delivery.id || `${group.customerName}-${idx}`;
-                  return (
-                    <TableRow key={key} hover>
-                      <TableCell align="right">{formatDate(delivery.date)}</TableCell>
-                      <TableCell align="right">{delivery.deliveredTo || "—"}</TableCell>
-                      <TableCell align="right" sx={{ p: 1 }}>
-                        <ItemsMiniTable
-                          items={delivery.items}
-                          getName={getProductName}
-                          getSku={getProductSku}
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        {delivery.signature ? (
-                          <IconButton onClick={() => handleDownloadReceipt(delivery._id || delivery.id)}>
-                            <PictureAsPdfIcon color="error" />
-                          </IconButton>
-                        ) : (
-                          <span>—</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Box>
-      ))}
+        </select>
+      </div>
 
       {groupedAndSorted.length === 0 && (
-        <Typography color="text.secondary" textAlign="center" mt={8}>
-          לא נמצאו ניפוקים
-        </Typography>
+        <div className="dl-empty">לא נמצאו ניפוקים</div>
       )}
-    </Box>
+
+      {groupedAndSorted.map((group) => (
+        <div key={group.customerName} className="dl-group">
+          <h3>{group.customerName}</h3>
+          <table className="dl-table" dir="rtl">
+            <thead>
+              <tr>
+                <th>תאריך</th>
+                <th>למי נופק</th>
+                <th>פריטים (מקט | שם מוצר | כמות)</th>
+                <th>חתימה</th>
+              </tr>
+            </thead>
+            <tbody>
+              {group.deliveries.map((delivery, idx) => (
+                <tr key={delivery._id || delivery.id || idx}>
+                  <td>{formatDate(delivery.date)}</td>
+                  <td>{delivery.deliveredTo || "—"}</td>
+                  <td>
+                    <ItemsMiniTable
+                      items={delivery.items}
+                      getName={getProductName}
+                      getSku={getProductSku}
+                    />
+                  </td>
+                  <td style={{ textAlign: "center" }}>
+                    {delivery.signature ? (
+                      <button
+                        className="dl-pdf-btn"
+                        onClick={() => handleDownloadReceipt(delivery._id || delivery.id)}
+                      >
+                        <PictureAsPdfIcon style={{ color: "red", verticalAlign: "middle" }} />
+                      </button>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </div>
   );
 }
-
