@@ -2,17 +2,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { api } from "../api";
 import ProductHistory from "./ProductHistory";
-
-import {
-  Box, Typography, TextField, IconButton, Button, Divider,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-  Stack, useMediaQuery, Tooltip, InputAdornment, FormControl, Select, MenuItem
-} from "@mui/material";
-import DeleteIcon from "@mui/icons-material/Delete";
-import HistoryIcon from "@mui/icons-material/History";
-import InventoryIcon from "@mui/icons-material/Inventory";
-import UpdateIcon from "@mui/icons-material/PublishedWithChanges";
-import { useTheme } from "@mui/material/styles";
+import "./products-list.css"; // ← חשוב!
 
 export default function ProductsList() {
   const [products, setProducts] = useState([]);
@@ -22,15 +12,13 @@ export default function ProductsList() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const [deltas, setDeltas] = useState({});
-  const [rowBusy, setRowBusy] = useState({});
-
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  // שינוי מלאי לכל מוצר
+  const [deltas, setDeltas] = useState({}); // { [productId]: string }
+  const [rowBusy, setRowBusy] = useState({}); // אינדיקציית טעינה לשורה
 
   const pid = (p) => String(p._id || p.id);
 
-  // --- מחסנים ---
+  // טען מחסנים
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -39,7 +27,6 @@ export default function ProductsList() {
         if (!mounted) return;
         setWarehouses(Array.isArray(res.data) ? res.data : []);
       } catch (e) {
-        console.error("GET /api/warehouses failed:", e?.response?.status, e?.response?.data || e?.message);
         if (!mounted) return;
         setWarehouses([]);
       }
@@ -47,6 +34,7 @@ export default function ProductsList() {
     return () => { mounted = false; };
   }, []);
 
+  // מפה ID→שם
   const whMap = useMemo(() => {
     const m = new Map();
     (warehouses || []).forEach(w => {
@@ -62,7 +50,7 @@ export default function ProductsList() {
     return whMap.get(key) || key;
   };
 
-  // --- טעינת מוצרים + סינון/חיפוש ---
+  // טעינת מוצרים (סינון מחסן + חיפוש)
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
@@ -72,7 +60,6 @@ export default function ProductsList() {
       const res = await api.get("/api/products", { params });
       setProducts(res.data || []);
     } catch (err) {
-      console.error(err);
       setProducts([]);
     } finally {
       setLoading(false);
@@ -120,310 +107,229 @@ export default function ProductsList() {
       setDelta(productId, "");
       await fetchProducts();
     } catch (err) {
-      console.error(err);
       alert("שגיאה בעדכון מלאי: " + (err?.response?.data?.error || err?.message));
     } finally {
       setRowBusy((prev) => ({ ...prev, [productId]: false }));
     }
   };
 
+  // שינוי שיוך מחסן למוצר
   const handleChangeWarehouse = async (productId, newWarehouseId) => {
     try {
       setRowBusy((prev) => ({ ...prev, [productId]: true }));
-      const patch = { warehouseId: newWarehouseId ? String(newWarehouseId) : "" };
+      const patch = { warehouseId: newWarehouseId ? String(newWarehouseId) : "" }; // ""=ללא שיוך
       await api.put(`/api/products/${productId}`, patch);
       await fetchProducts();
     } catch (err) {
-      console.error(err);
       alert("שגיאה בעדכון המחסן: " + (err?.response?.data?.error || err?.message));
     } finally {
       setRowBusy((prev) => ({ ...prev, [productId]: false }));
     }
   };
 
-  const noResults = useMemo(() => !loading && products.length === 0, [loading, products]);
-
-  // --- פקדי שינוי מלאי (מותאם RTL) ---
-  const StockAdjustControls = ({ id }) => {
-    const value = deltas[id] ?? "";
-    const busy = !!rowBusy[id];
-
-    return (
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ width: "100%", justifyContent: { xs: "space-between", sm: "flex-start" } }}>
-        <TextField
-          size="small"
-          type="number"
-          value={value}
-          onChange={(e) => setDelta(id, e.target.value)}
-          placeholder="שינוי מלאי (למשל 5 או -3)"
-          sx={{ width: { xs: "100%", sm: 200 } }}
-          inputProps={{ style: { textAlign: "right" }, dir: "rtl" }}
-          // ב־RTL עדיף האייקון בסוף
-          InputProps={{ endAdornment: <InputAdornment position="end">Δ</InputAdornment> }}
-          disabled={busy}
-        />
-        <Tooltip title="עדכן מלאי (תוספת/הפחתה)">
-          <span>
-            <Button
-              size="small"
-              variant="contained"
-              onClick={() => handleAdjustStock(id)}
-              startIcon={<UpdateIcon />}
-              disabled={busy}
-            >
-              עדכן
-            </Button>
-          </span>
-        </Tooltip>
-      </Stack>
-    );
-  };
-
-  // --- תא בחירת מחסן (RTL מלא כולל התפריט) ---
-  const WarehouseSelectCell = ({ value, onChange, disabled, fullWidth = false }) => {
-    return (
-      <FormControl size="small" sx={{ minWidth: fullWidth ? "100%" : 160, direction: "rtl" }} fullWidth={fullWidth}>
-        <Select
-          value={value || ""}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={disabled}
-          displayEmpty
-          sx={{ direction: "rtl", textAlign: "right" }}
-          MenuProps={{
-            // RTL לתפריט עצמו
-            PaperProps: { sx: { direction: "rtl" } },
-            anchorOrigin: { vertical: "bottom", horizontal: "right" },
-            transformOrigin: { vertical: "top", horizontal: "right" },
-          }}
-        >
-          <MenuItem value="">ללא שיוך</MenuItem>
-          {warehouses.map(w => (
-            <MenuItem key={w._id || w.id} value={String(w._id || w.id)}>
-              {w.name || "(ללא שם)"}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
-    );
-  };
+  const noResults = !loading && products.length === 0;
 
   return (
-    <Box sx={{ direction: "rtl", textAlign: "right", p: { xs: 1.5, sm: 2 } }}>
-      {/* פס עליון */}
-      <Stack
-        direction={{ xs: "column", sm: "row" }}
-        spacing={1.5}
-        alignItems={{ xs: "stretch", sm: "center" }}
-        mb={2}
-      >
-        <Typography variant="h5" fontWeight="bold" sx={{ flex: 1, textAlign: { xs: "center", sm: "right" } }}>
-          רשימת מוצרים
-        </Typography>
+    <div className="pl-root" dir="rtl">
+      {/* פס עליון: כותרת, חיפוש, מסנן מחסן */}
+      <div className="pl-topbar">
+        <h2 className="pl-title">רשימת מוצרים</h2>
 
-        <FormControl size="small" sx={{ minWidth: 180, direction: "rtl" }}>
-          <Select
+        <div className="pl-filters">
+          <select
+            className="pl-select"
             value={selectedWarehouse}
             onChange={(e) => setSelectedWarehouse(e.target.value)}
-            displayEmpty
-            sx={{ direction: "rtl", textAlign: "right" }}
-            MenuProps={{
-              PaperProps: { sx: { direction: "rtl" } },
-              anchorOrigin: { vertical: "bottom", horizontal: "right" },
-              transformOrigin: { vertical: "top", horizontal: "right" },
-            }}
           >
-            <MenuItem value="">
-              <em>כל המחסנים</em>
-            </MenuItem>
+            <option value="">כל המחסנים</option>
             {warehouses.map(w => (
-              <MenuItem key={w._id || w.id} value={String(w._id || w.id)}>
+              <option key={w._id || w.id} value={String(w._id || w.id)}>
                 {w.name || "(ללא שם)"}
-              </MenuItem>
+              </option>
             ))}
-          </Select>
-        </FormControl>
+          </select>
 
-        <TextField
-          size="small"
-          placeholder="חפש מוצר בשם או במקט..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          sx={{ minWidth: { xs: "100%", sm: 280 } }}
-          inputProps={{ style: { textAlign: "right" }, dir: "rtl" }}
-        />
-      </Stack>
+          <input
+            className="pl-input"
+            placeholder="חפש מוצר בשם או במקט…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
 
-      {/* מובייל — כרטיסים רספונסיביים */}
-      {isMobile ? (
-        <Stack spacing={1}>
-          {loading && <Typography>טוען...</Typography>}
-          {noResults && <Typography color="text.secondary">לא נמצאו מוצרים</Typography>}
+      {/* הודעות מצב */}
+      {loading && <div className="pl-status">טוען…</div>}
+      {noResults && <div className="pl-status pl-muted">לא נמצאו מוצרים</div>}
 
-          {products.map((p) => {
-            const id = pid(p);
-            const open = selectedProduct === id;
-            const busy = !!rowBusy[id];
+      {/* רשימת מובייל (כרטיסים) */}
+      <div className="pl-cards">
+        {products.map((p) => {
+          const id = pid(p);
+          const open = selectedProduct === id;
+          const busy = !!rowBusy[id];
 
-            return (
-              <Paper
-                key={id}
-                elevation={1}
-                sx={{
-                  p: 1.25,
-                  direction: "rtl",
-                  "& *": { direction: "rtl" },
-                }}
-              >
-                {/* כותרת הכרטיס */}
-                <Stack spacing={0.5} sx={{ mb: 1 }}>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <InventoryIcon fontSize="small" />
-                    <Typography fontWeight="bold">{p.name}</Typography>
-                  </Stack>
-                  <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
-                    מקט: <b>{p.sku || "—"}</b>
-                  </Typography>
-                  {p.description && (
-                    <Typography variant="body2" color="text.secondary">
-                      {p.description}
-                    </Typography>
+          return (
+            <div key={id} className="pl-card">
+              <div className="pl-card-header">
+                <div className="pl-card-name">{p.name}</div>
+                <button className="pl-btn danger outline" onClick={() => handleDelete(id)} disabled={busy}>
+                  מחק
+                </button>
+              </div>
+
+              <div className="pl-kv">
+                <div className="pl-key">מקט</div>
+                <div className="pl-val monospace">{p.sku || "—"}</div>
+              </div>
+
+              {p.description && (
+                <div className="pl-kv">
+                  <div className="pl-key">תיאור</div>
+                  <div className="pl-val muted">{p.description}</div>
+                </div>
+              )}
+
+              <div className="pl-kv">
+                <div className="pl-key">כמות</div>
+                <div className="pl-val"><b>{busy ? "…" : p.stock}</b></div>
+              </div>
+
+              <div className="pl-kv">
+                <div className="pl-key">מחסן</div>
+                <div className="pl-val">
+                  <div className="pl-wh">
+                    <div className="pl-wh-name">{getWhName(p.warehouseId)}</div>
+                    <select
+                      className="pl-select"
+                      value={p.warehouseId || ""}
+                      onChange={(e) => handleChangeWarehouse(id, e.target.value)}
+                      disabled={busy}
+                    >
+                      <option value="">ללא שיוך</option>
+                      {warehouses.map(w => (
+                        <option key={w._id || w.id} value={String(w._id || w.id)}>
+                          {w.name || "(ללא שם)"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pl-row">
+                <input
+                  className="pl-input"
+                  type="number"
+                  placeholder="Δ שינוי מלאי (למשל 5 או -3)"
+                  value={deltas[id] ?? ""}
+                  onChange={(e) => setDelta(id, e.target.value)}
+                  style={{ textAlign: "right" }}
+                />
+                <button className="pl-btn primary" onClick={() => handleAdjustStock(id)} disabled={busy}>
+                  עדכן
+                </button>
+              </div>
+
+              <div className="pl-row">
+                <button className="pl-btn" onClick={() => handleShowHistory(id)}>
+                  {open ? "הסתר היסטוריה" : "הצג היסטוריה"}
+                </button>
+              </div>
+
+              {open && (
+                <div className="pl-history">
+                  <ProductHistory productId={id} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* טבלת דסקטופ */}
+      <div className="pl-table-wrap">
+        <table className="pl-table" dir="rtl">
+          <thead>
+            <tr>
+              <th>מקט</th>
+              <th>שם</th>
+              <th>תיאור</th>
+              <th>כמות</th>
+              <th>מחסן</th>
+              <th>שינוי מלאי (Δ)</th>
+              <th>פעולות</th>
+            </tr>
+          </thead>
+          <tbody>
+            {products.map((p) => {
+              const id = pid(p);
+              const busy = !!rowBusy[id];
+              const open = selectedProduct === id;
+
+              return (
+                <React.Fragment key={id}>
+                  <tr>
+                    <td className="monospace">{p.sku || "—"}</td>
+                    <td>{p.name}</td>
+                    <td className="muted">{p.description || ""}</td>
+                    <td><b>{busy ? "…" : p.stock}</b></td>
+                    <td>
+                      <div className="pl-wh">
+                        <div className="pl-wh-name">{getWhName(p.warehouseId)}</div>
+                        <select
+                          className="pl-select"
+                          value={p.warehouseId || ""}
+                          onChange={(e) => handleChangeWarehouse(id, e.target.value)}
+                          disabled={busy}
+                        >
+                          <option value="">ללא שיוך</option>
+                          {warehouses.map(w => (
+                            <option key={w._id || w.id} value={String(w._id || w.id)}>
+                              {w.name || "(ללא שם)"}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="pl-row nowrap">
+                        <input
+                          className="pl-input"
+                          type="number"
+                          placeholder="Δ"
+                          value={deltas[id] ?? ""}
+                          onChange={(e) => setDelta(id, e.target.value)}
+                          style={{ width: 120, textAlign: "right" }}
+                        />
+                        <button className="pl-btn primary" onClick={() => handleAdjustStock(id)} disabled={busy}>
+                          עדכן
+                        </button>
+                      </div>
+                    </td>
+                    <td className="nowrap">
+                      <button className="pl-btn" onClick={() => handleShowHistory(id)}>
+                        {open ? "הסתר היסטוריה" : "הצג היסטוריה"}
+                      </button>
+                      <button className="pl-btn danger outline" onClick={() => handleDelete(id)} disabled={busy}>
+                        מחק
+                      </button>
+                    </td>
+                  </tr>
+
+                  {open && (
+                    <tr className="pl-history-row">
+                      <td colSpan={7}>
+                        <ProductHistory productId={id} />
+                      </td>
+                    </tr>
                   )}
-                </Stack>
-
-                {/* שורה: מחסן + כמות */}
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-                  <Typography variant="body2" sx={{ whiteSpace: "nowrap" }}>מחסן:</Typography>
-                  <WarehouseSelectCell
-                    value={p.warehouseId}
-                    onChange={(wid) => handleChangeWarehouse(id, wid)}
-                    disabled={busy}
-                    fullWidth
-                  />
-                </Stack>
-                <Typography variant="body2" sx={{ mb: 1 }}>
-                  כמות במלאי: <b>{busy ? "…" : p.stock}</b>
-                </Typography>
-
-                {/* שינוי מלאי */}
-                <StockAdjustControls id={id} />
-
-                {/* פעולות */}
-                <Stack direction="row" spacing={1} alignItems="center" justifyContent="flex-start" sx={{ mt: 1 }}>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={() => handleShowHistory(id)}
-                    startIcon={<HistoryIcon />}
-                  >
-                    {open ? "הסתר היסטוריה" : "הצג היסטוריה"}
-                  </Button>
-                  <Button
-                    size="small"
-                    color="error"
-                    variant="outlined"
-                    startIcon={<DeleteIcon />}
-                    onClick={() => handleDelete(id)}
-                  >
-                    מחק
-                  </Button>
-                </Stack>
-
-                {/* היסטוריה */}
-                {open && (
-                  <>
-                    <Divider sx={{ my: 1 }} />
-                    <ProductHistory productId={id} />
-                  </>
-                )}
-              </Paper>
-            );
-          })}
-        </Stack>
-      ) : (
-        // דסקטופ — טבלה RTL מלאה
-        <TableContainer component={Paper} elevation={2}>
-          <Table dir="rtl">
-            <TableHead>
-              <TableRow>
-                <TableCell align="right" sx={{ width: "10%" }}>מקט</TableCell>
-                <TableCell align="right" sx={{ width: "18%" }}>שם</TableCell>
-                <TableCell align="right" sx={{ width: "26%" }}>תיאור</TableCell>
-                <TableCell align="right" sx={{ width: "8%" }}>כמות</TableCell>
-                <TableCell align="right" sx={{ width: "16%" }}>מחסן</TableCell>
-                <TableCell align="right" sx={{ width: "22%" }}>שינוי מלאי (Δ)</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {loading && (
-                <TableRow>
-                  <TableCell colSpan={6} align="center">טוען...</TableCell>
-                </TableRow>
-              )}
-              {noResults && (
-                <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ color: "text.secondary" }}>
-                    לא נמצאו מוצרים
-                  </TableCell>
-                </TableRow>
-              )}
-              {products.map((p) => {
-                const id = pid(p);
-                const busy = !!rowBusy[id];
-
-                return (
-                  <React.Fragment key={id}>
-                    <TableRow hover>
-                      <TableCell align="right" sx={{ fontFamily: "monospace" }}>
-                        {p.sku || "—"}
-                      </TableCell>
-                      <TableCell align="right">{p.name}</TableCell>
-                      <TableCell align="right" sx={{ color: "text.secondary" }}>
-                        {p.description}
-                      </TableCell>
-                      <TableCell align="right"><b>{busy ? "…" : p.stock}</b></TableCell>
-
-                      <TableCell align="right">
-                        <Stack direction="row" spacing={1} alignItems="center" justifyContent="flex-end" sx={{ direction: "rtl" }}>
-                          <Typography variant="body2">{getWhName(p.warehouseId)}</Typography>
-                          <WarehouseSelectCell
-                            value={p.warehouseId}
-                            onChange={(wid) => handleChangeWarehouse(id, wid)}
-                            disabled={busy}
-                          />
-                        </Stack>
-                      </TableCell>
-
-                      <TableCell align="right">
-                        <Stack direction="row" spacing={1} justifyContent="flex-end" alignItems="center" sx={{ direction: "rtl" }}>
-                          <StockAdjustControls id={id} />
-                          <Tooltip title={selectedProduct === id ? "הסתר היסטוריה" : "הצג היסטוריה"}>
-                            <Button size="small" onClick={() => handleShowHistory(id)}>
-                              {selectedProduct === id ? "הסתר היסטוריה" : "הצג היסטוריה"}
-                            </Button>
-                          </Tooltip>
-                          <Tooltip title="מחק מוצר">
-                            <IconButton onClick={() => handleDelete(id)} color="error">
-                              <DeleteIcon />
-                            </IconButton>
-                          </Tooltip>
-                        </Stack>
-                      </TableCell>
-                    </TableRow>
-
-                    {selectedProduct === id && (
-                      <TableRow>
-                        <TableCell colSpan={6} sx={{ background: "#fafafa" }}>
-                          <ProductHistory productId={id} />
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
-    </Box>
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
