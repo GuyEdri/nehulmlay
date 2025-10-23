@@ -119,10 +119,26 @@ export default function Warehouses() {
       onChange={(e) => setName(e.target.value)}
       required
       fullWidth
-      // אל תשים כאן sx שני. השתמש רק בזה:
-      sx={rtlTextFieldSx}
-      inputProps={{ dir: "rtl", style: { textAlign: "right" } }}
-      InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
+      variant="outlined"
+      // RTL מלא ל-input + label:
+      InputProps={{
+        sx: {
+          direction: "rtl",
+          textAlign: "right",
+          "& input": { direction: "rtl", textAlign: "right" },
+        },
+      }}
+      InputLabelProps={{
+        sx: {
+          direction: "rtl",
+          textAlign: "right",
+          left: "auto",
+          right: 14,
+          transformOrigin: "right top",
+          // לפעמים ה-legend מתעקש:
+          "&.MuiInputLabel-outlined": { direction: "rtl" },
+        },
+      }}
     />
 
     <TextField
@@ -130,9 +146,23 @@ export default function Warehouses() {
       value={address}
       onChange={(e) => setAddress(e.target.value)}
       fullWidth
-      sx={rtlTextFieldSx}
-      inputProps={{ dir: "rtl", style: { textAlign: "right" } }}
-      InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
+      variant="outlined"
+      InputProps={{
+        sx: {
+          direction: "rtl",
+          textAlign: "right",
+          "& input": { direction: "rtl", textAlign: "right" },
+        },
+      }}
+      InputLabelProps={{
+        sx: {
+          direction: "rtl",
+          textAlign: "right",
+          left: "auto",
+          right: 14,
+          transformOrigin: "right top",
+        },
+      }}
     />
 
     <TextField
@@ -142,19 +172,36 @@ export default function Warehouses() {
       fullWidth
       multiline
       minRows={2}
-      sx={rtlTextFieldSx}
-      inputProps={{ dir: "rtl", style: { textAlign: "right" } }}
-      InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
+      variant="outlined"
+      InputProps={{
+        sx: {
+          direction: "rtl",
+          textAlign: "right",
+          "& textarea": { direction: "rtl", textAlign: "right" },
+        },
+      }}
+      InputLabelProps={{
+        sx: {
+          direction: "rtl",
+          textAlign: "right",
+          left: "auto",
+          right: 14,
+          transformOrigin: "right top",
+        },
+      }}
     />
 
     <Stack direction="row" justifyContent="flex-end">
-      <Button type="submit" variant="contained">צור מחסן</Button>
+      <Button type="submit" variant="contained">
+        צור מחסן
+      </Button>
     </Stack>
 
     {err && <Alert severity="error" dir="rtl">{err}</Alert>}
     {success && <Alert severity="success" dir="rtl">{success}</Alert>}
   </Stack>
 </form>
+
       </Paper>
 
       {/* רשימת מחסנים – טבלת HTML רגילה */}
