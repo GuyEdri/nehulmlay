@@ -103,90 +103,56 @@ export default function Warehouses() {
               יצירת מחסן חדש
             </Typography>
 
-            <form onSubmit={onCreate} dir="rtl">
-              <Stack spacing={2}>
-                <TextField
-                  label="שם מחסן *"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  fullWidth
-                  InputProps={{
-                    sx: {
-                      direction: "rtl",
-                      textAlign: "right",
-                      "& input": { textAlign: "right" },
-                    },
-                  }}
-                  InputLabelProps={{
-                    sx: {
-                      direction: "rtl",
-                      textAlign: "right",
-                      right: 14,
-                      left: "auto",
-                      transformOrigin: "right top",
-                    },
-                  }}
-                />
+            <form onSubmit={onCreate} dir="rtl" style={{ direction: "rtl", textAlign: "right" }}>
+  <Stack spacing={2} sx={{ direction: "rtl", textAlign: "right" }}>
+    <TextField
+      label="שם מחסן *"
+      value={name}
+      onChange={(e) => setName(e.target.value)}
+      required
+      fullWidth
+      sx={rtlTextFieldSx}                   // ← רק זה!
+      inputProps={{ dir: "rtl" }}
+      InputLabelProps={{
+        sx: { right: 14, left: "auto", transformOrigin: "right top", textAlign: "right" },
+      }}
+    />
 
-                <TextField
-                  label="כתובת (רשות)"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  fullWidth
-                  InputProps={{
-                    sx: {
-                      direction: "rtl",
-                      textAlign: "right",
-                      "& input": { textAlign: "right" },
-                    },
-                  }}
-                  InputLabelProps={{
-                    sx: {
-                      direction: "rtl",
-                      textAlign: "right",
-                      right: 14,
-                      left: "auto",
-                      transformOrigin: "right top",
-                    },
-                  }}
-                />
+    <TextField
+      label="כתובת (רשות)"
+      value={address}
+      onChange={(e) => setAddress(e.target.value)}
+      fullWidth
+      sx={rtlTextFieldSx}                   // ← רק זה!
+      inputProps={{ dir: "rtl" }}
+      InputLabelProps={{
+        sx: { right: 14, left: "auto", transformOrigin: "right top", textAlign: "right" },
+      }}
+    />
 
-                <TextField
-                  label="הערות (רשות)"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  fullWidth
-                  multiline
-                  minRows={2}
-                  InputProps={{
-                    sx: {
-                      direction: "rtl",
-                      textAlign: "right",
-                      "& textarea": { textAlign: "right" },
-                    },
-                  }}
-                  InputLabelProps={{
-                    sx: {
-                      direction: "rtl",
-                      textAlign: "right",
-                      right: 14,
-                      left: "auto",
-                      transformOrigin: "right top",
-                    },
-                  }}
-                />
+    <TextField
+      label="הערות (רשות)"
+      value={notes}
+      onChange={(e) => setNotes(e.target.value)}
+      fullWidth
+      multiline
+      minRows={2}
+      sx={rtlTextFieldSx}                   // ← רק זה!
+      inputProps={{ dir: "rtl" }}
+      InputLabelProps={{
+        sx: { right: 14, left: "auto", transformOrigin: "right top", textAlign: "right" },
+      }}
+    />
 
-                <Stack direction="row" justifyContent="flex-end">
-                  <Button type="submit" variant="contained">
-                    צור מחסן
-                  </Button>
-                </Stack>
+    <Stack direction="row" justifyContent="flex-end">
+      <Button type="submit" variant="contained">צור מחסן</Button>
+    </Stack>
 
-                {err && <Alert severity="error">{err}</Alert>}
-                {success && <Alert severity="success">{success}</Alert>}
-              </Stack>
-            </form>
+    {err && <Alert severity="error" dir="rtl">{err}</Alert>}
+    {success && <Alert severity="success" dir="rtl">{success}</Alert>}
+  </Stack>
+</form>
+
           </Paper>
 
           {/* רשימת מחסנים – טבלת HTML רגילה */}
