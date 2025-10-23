@@ -44,11 +44,11 @@ export default function ProductsList() {
     return m;
   }, [warehouses]);
 
- // const getWhName = (wid) => {
-   // if (!wid) return "ללא שיוך";
-    //const key = String(wid);
-    //return whMap.get(key) || key;
-  //};
+  const getWhName = (wid) => {
+    if (!wid) return "ללא שיוך";
+    const key = String(wid);
+    return whMap.get(key) || key;
+  };
 
   // טעינת מוצרים (סינון מחסן + חיפוש)
   const fetchProducts = useCallback(async () => {
@@ -276,7 +276,6 @@ export default function ProductsList() {
                     <td><b>{busy ? "…" : p.stock}</b></td>
                     <td>
                       <div className="pl-wh">
-                        <div className="pl-wh-name">{getWhName(p.warehouseId)}</div>
                         <select
                           className="pl-select"
                           value={p.warehouseId || ""}
