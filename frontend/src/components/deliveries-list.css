@@ -6,6 +6,7 @@
   max-width: 1000px;
   margin: auto;
   box-sizing: border-box;
+  background: #fafafa;
 }
 
 .dl-header {
@@ -20,6 +21,7 @@
 .dl-header h2 {
   margin: 0;
   font-size: 22px;
+  color: #222;
 }
 
 .dl-btn {
@@ -32,7 +34,7 @@
   font-size: 15px;
   transition: background 0.2s ease;
 }
-.dl-btn.primary:hover {
+.dl-btn:hover {
   background-color: #115293;
 }
 
@@ -50,7 +52,7 @@
 }
 
 .dl-select {
-  padding: 6px 10px;
+  padding: 8px 10px;
   font-size: 15px;
   border: 1px solid #ccc;
   border-radius: 6px;
@@ -59,16 +61,19 @@
 
 .dl-group {
   margin-bottom: 30px;
-  border: 1px solid #eee;
-  border-radius: 8px;
-  padding: 10px;
-  background: #fafafa;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.06);
+  padding: 16px;
 }
 
 .dl-group h3 {
-  margin-bottom: 12px;
-  color: #1976d2;
+  margin-bottom: 14px;
+  color: #1565c0;
   font-size: 18px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 4px;
 }
 
 .dl-table {
@@ -119,7 +124,30 @@
   transform: scale(1.1);
 }
 
-/* ✅ עיצוב מובייל */
+/* ✅ כפתור חזרה למעלה */
+.scroll-top-btn {
+  position: fixed;
+  bottom: 25px;
+  left: 25px;
+  background-color: #1976d2;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  padding: 10px;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+  z-index: 1000;
+}
+.scroll-top-btn:hover {
+  background-color: #0d47a1;
+  transform: translateY(-3px);
+}
+.scroll-top-btn svg {
+  font-size: 24px;
+}
+
+/* ✅ תצוגת מובייל (card layout) */
 @media (max-width: 768px) {
   .dl-root {
     padding: 12px;
@@ -153,38 +181,43 @@
     font-size: 16px;
   }
 
+  /* --- Cards --- */
   .dl-group {
-    padding: 8px;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+    padding: 12px 14px;
   }
 
   .dl-group h3 {
-    font-size: 16px;
+    font-size: 17px;
     text-align: center;
+    margin-bottom: 10px;
   }
 
-  /* הטבלה תתנהג כמו כרטיסים */
   .dl-table, .dl-table thead, .dl-table tbody, .dl-table th, .dl-table td, .dl-table tr {
     display: block;
     width: 100%;
   }
 
   .dl-table thead {
-    display: none; /* מסתירים את הכותרות */
+    display: none;
   }
 
   .dl-table tr {
     background: #fff;
     border: 1px solid #ddd;
-    border-radius: 6px;
-    margin-bottom: 12px;
-    padding: 10px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    border-radius: 8px;
+    margin-bottom: 14px;
+    padding: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
   }
 
   .dl-table td {
     border: none;
     display: flex;
     justify-content: space-between;
+    align-items: center;
     padding: 6px 0;
     font-size: 14px;
   }
@@ -197,35 +230,13 @@
 
   .dl-items-table {
     font-size: 12px;
+    border: none;
   }
-}
-/* כפתור חזרה למעלה */
-.scroll-top-btn {
-  position: fixed;
-  bottom: 25px;
-  left: 25px;
-  background-color: #1976d2;
-  color: white;
-  border: none;
-  border-radius: 50%;
-  padding: 10px;
-  cursor: pointer;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
-  transition: all 0.3s ease;
-  z-index: 1000;
-}
 
-.scroll-top-btn:hover {
-  background-color: #0d47a1;
-  transform: translateY(-3px);
-}
+  .dl-items-table th {
+    background: #f8f8f8;
+  }
 
-.scroll-top-btn svg {
-  font-size: 24px;
-}
-
-/* מובייל: כפתור מעט גדול יותר ונגיש */
-@media (max-width: 600px) {
   .scroll-top-btn {
     bottom: 20px;
     left: 20px;
