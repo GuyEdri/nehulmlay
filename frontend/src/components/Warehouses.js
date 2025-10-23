@@ -114,22 +114,22 @@ export default function Warehouses() {
         <form onSubmit={onCreate} dir="rtl" style={{ direction: "rtl", textAlign: "right" }}>
   <Stack spacing={2} sx={{ direction: "rtl", textAlign: "right" }}>
     <TextField
-      sx={{textAlign:"right"}}
       label="שם מחסן *"
       value={name}
       onChange={(e) => setName(e.target.value)}
       required
       fullWidth
+      sx={rtlTextFieldSx}
       inputProps={{ dir: "rtl" }}
       InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
     />
 
-    <TextField    
+    <TextField
       label="כתובת (רשות)"
       value={address}
       onChange={(e) => setAddress(e.target.value)}
       fullWidth
-      sx={{textAlign:"right"}}
+      sx={rtlTextFieldSx}
       inputProps={{ dir: "rtl" }}
       InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
     />
@@ -141,7 +141,7 @@ export default function Warehouses() {
       fullWidth
       multiline
       minRows={2}
-      sx={{textAlign:"right"}}
+      sx={rtlTextFieldSx}
       inputProps={{ dir: "rtl" }}
       InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
     />
