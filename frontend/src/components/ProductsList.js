@@ -26,18 +26,20 @@ export default function ProductsList() {
         const res = await api.get("/api/warehouses");
         if (!mounted) return;
         setWarehouses(Array.isArray(res.data) ? res.data : []);
-      } catch (e) {
+      } catch {
         if (!mounted) return;
         setWarehouses([]);
       }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // מפה ID→שם
   const whMap = useMemo(() => {
     const m = new Map();
-    (warehouses || []).forEach(w => {
+    (warehouses || []).forEach((w) => {
       const id = String(w._id || w.id);
       m.set(id, w.name || "(ללא שם)");
     });
@@ -50,6 +52,23 @@ export default function ProductsList() {
     return whMap.get(key) || key;
   };
 
+  // חישוב אורך שם המחסן הארוך ביותר (לרוחב ה-select)
+  const longestWhLabelCh = useMemo(() => {
+    let maxLen = "ללא שיוך".length;
+    for (const w of warehouses) {
+      const nm = (w?.name || "(ללא שם)").trim();
+      if (nm.length > maxLen) maxLen = nm.length;
+    }
+    // ריווח לפילד/חץ/ריפוד ועוד קצת אוויר
+    return Math.max(maxLen + 6, 16); // מינימום 16ch
+  }, [warehouses]);
+
+  // style דינמי ל-select של המחסן
+  const whSelectStyle = useMemo(
+    () => ({ width: `min(${longestWhLabelCh}ch, 100%)` }),
+    [longestWhLabelCh]
+  );
+
   // טעינת מוצרים (סינון מחסן + חיפוש)
   const fetchProducts = useCallback(async () => {
     try {
@@ -59,7 +78,7 @@ export default function ProductsList() {
       if (search) params.search = search;
       const res = await api.get("/api/products", { params });
       setProducts(res.data || []);
-    } catch (err) {
+    } catch {
       setProducts([]);
     } finally {
       setLoading(false);
@@ -134,7 +153,6 @@ export default function ProductsList() {
       {/* פס עליון: כותרת, חיפוש, מסנן מחסן */}
       <div className="pl-topbar">
         <h2 className="pl-title">רשימת מוצרים</h2>
-
         <div className="pl-filters">
           <select
             className="pl-select"
@@ -142,7 +160,7 @@ export default function ProductsList() {
             onChange={(e) => setSelectedWarehouse(e.target.value)}
           >
             <option value="">כל המחסנים</option>
-            {warehouses.map(w => (
+            {warehouses.map((w) => (
               <option key={w._id || w.id} value={String(w._id || w.id)}>
                 {w.name || "(ללא שם)"}
               </option>
@@ -192,22 +210,24 @@ export default function ProductsList() {
 
               <div className="pl-kv">
                 <div className="pl-key">כמות</div>
-                <div className="pl-val"><b>{busy ? "…" : p.stock}</b></div>
+                <div className="pl-val">
+                  <b>{busy ? "…" : p.stock}</b>
+                </div>
               </div>
 
               <div className="pl-kv">
                 <div className="pl-key">מחסן</div>
                 <div className="pl-val">
                   <div className="pl-wh">
-                    <div className="pl-wh-name">{getWhName(p.warehouseId)}</div>
                     <select
-                      className="pl-select"
+                      className="pl-select pl-wh-select"
+                      style={whSelectStyle}
                       value={p.warehouseId || ""}
                       onChange={(e) => handleChangeWarehouse(id, e.target.value)}
                       disabled={busy}
                     >
                       <option value="">ללא שיוך</option>
-                      {warehouses.map(w => (
+                      {warehouses.map((w) => (
                         <option key={w._id || w.id} value={String(w._id || w.id)}>
                           {w.name || "(ללא שם)"}
                         </option>
@@ -273,17 +293,20 @@ export default function ProductsList() {
                     <td className="monospace">{p.sku || "—"}</td>
                     <td>{p.name}</td>
                     <td className="muted">{p.description || ""}</td>
-                    <td><b>{busy ? "…" : p.stock}</b></td>
+                    <td>
+                      <b>{busy ? "…" : p.stock}</b>
+                    </td>
                     <td>
                       <div className="pl-wh">
                         <select
-                          className="pl-select"
+                          className="pl-select pl-wh-select"
+                          style={whSelectStyle}
                           value={p.warehouseId || ""}
                           onChange={(e) => handleChangeWarehouse(id, e.target.value)}
                           disabled={busy}
                         >
                           <option value="">ללא שיוך</option>
-                          {warehouses.map(w => (
+                          {warehouses.map((w) => (
                             <option key={w._id || w.id} value={String(w._id || w.id)}>
                               {w.name || "(ללא שם)"}
                             </option>
