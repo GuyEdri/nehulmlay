@@ -106,7 +106,7 @@ export default function Warehouses() {
       </Typography>
 
       {/* טופס יצירת מחסן */}
-      <Paper sx={{textAlign:"right"}} dir="rtl">
+      <Paper sx={{textAlign:right}} dir="rtl">
         <Typography sx={{ textAlign:"center" }}variant="h6" mb={1}>
           יצירת מחסן חדש
         </Typography>
@@ -114,22 +114,22 @@ export default function Warehouses() {
         <form onSubmit={onCreate} dir="rtl" style={{ direction: "rtl", textAlign: "right" }}>
   <Stack spacing={2} sx={{ direction: "rtl", textAlign: "right" }}>
     <TextField
+      sx={{textAlign:right}}
       label="שם מחסן *"
       value={name}
       onChange={(e) => setName(e.target.value)}
       required
       fullWidth
-      sx={rtlTextFieldSx}
       inputProps={{ dir: "rtl" }}
       InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
     />
 
-    <TextField
+    <TextField    
       label="כתובת (רשות)"
       value={address}
       onChange={(e) => setAddress(e.target.value)}
       fullWidth
-      sx={rtlTextFieldSx}
+      sx={{textAlign:right}}
       inputProps={{ dir: "rtl" }}
       InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
     />
@@ -141,7 +141,7 @@ export default function Warehouses() {
       fullWidth
       multiline
       minRows={2}
-      sx={{textAlign:"right"}}
+      sx={{textAlign:right}}
       inputProps={{ dir: "rtl" }}
       InputLabelProps={{ sx: { right: 14, left: "auto", transformOrigin: "right top" } }}
     />
