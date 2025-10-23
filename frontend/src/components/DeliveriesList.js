@@ -3,17 +3,19 @@ import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import _ from "lodash";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
+import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import { api } from "../api";
-import "./deliveries-list.css"; // נוסיף CSS משלנו
+import "./deliveries-list.css";
 
-// --- עזר להמרת תאריכים ---
+// --- פונקציות עזר לתאריכים ---
 const toDate = (date) => {
   try {
     if (!date) return null;
     if (typeof date === "object") {
       const sec = date.seconds ?? date._seconds;
       const nsec = date.nanoseconds ?? date._nanoseconds ?? 0;
-      if (typeof sec === "number") return new Date(sec * 1000 + Math.floor(nsec / 1e6));
+      if (typeof sec === "number")
+        return new Date(sec * 1000 + Math.floor(nsec / 1e6));
     }
     const d = new Date(date);
     return Number.isNaN(d.getTime()) ? null : d;
@@ -65,6 +67,7 @@ export default function DeliveriesList() {
   const [deliveries, setDeliveries] = useState([]);
   const [products, setProducts] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState("");
+  const [showScrollTop, setShowScrollTop] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -82,9 +85,24 @@ export default function DeliveriesList() {
     })();
   }, []);
 
+  // תצוגת כפתור "חזרה למעלה"
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 300);
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const productMap = useMemo(() => {
     const m = new Map();
-    products.forEach((p) => m.set(String(p._id || p.id), { name: p.name, sku: p.sku || "" }));
+    products.forEach((p) =>
+      m.set(String(p._id || p.id), { name: p.name, sku: p.sku || "" })
+    );
     return m;
   }, [products]);
 
@@ -97,7 +115,10 @@ export default function DeliveriesList() {
   );
 
   const filteredDeliveries = useMemo(
-    () => (selectedCustomer ? deliveries.filter((d) => d.customerName === selectedCustomer) : deliveries),
+    () =>
+      selectedCustomer
+        ? deliveries.filter((d) => d.customerName === selectedCustomer)
+        : deliveries,
     [deliveries, selectedCustomer]
   );
 
@@ -106,7 +127,11 @@ export default function DeliveriesList() {
       .groupBy((d) => d.customerName || "ללא שם לקוח")
       .map((items, customerName) => ({
         customerName,
-        deliveries: _.orderBy(items, (d) => toDate(d?.date)?.getTime() ?? 0, ["desc"]),
+        deliveries: _.orderBy(
+          items,
+          (d) => toDate(d?.date)?.getTime() ?? 0,
+          ["desc"]
+        ),
       }))
       .orderBy("customerName", ["asc"])
       .value();
@@ -114,7 +139,11 @@ export default function DeliveriesList() {
 
   const handleDownloadReceipt = async (deliveryId) => {
     try {
-      const res = await api.post(`/api/deliveries/${deliveryId}/receipt`, {}, { responseType: "blob" });
+      const res = await api.post(
+        `/api/deliveries/${deliveryId}/receipt`,
+        {},
+        { responseType: "blob" }
+      );
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement("a");
       link.href = url;
@@ -132,17 +161,21 @@ export default function DeliveriesList() {
     const rows = [];
     groupedAndSorted.forEach((group) => {
       group.deliveries.forEach((d) => {
-        const itemSKUs = d.items?.map(it => getProductSku(it.product) || "—").join(", ") || "";
-        const itemNames = d.items?.map(it => getProductName(it.product)).join(", ") || "";
-        const itemQtys = d.items?.map(it => it.quantity).join(", ") || "";
+        const itemSKUs =
+          d.items?.map((it) => getProductSku(it.product) || "—").join(", ") ||
+          "";
+        const itemNames =
+          d.items?.map((it) => getProductName(it.product)).join(", ") || "";
+        const itemQtys =
+          d.items?.map((it) => it.quantity).join(", ") || "";
         rows.push({
-          "לקוח": group.customerName,
-          "תאריך": formatDate(d.date),
+          לקוח: group.customerName,
+          תאריך: formatDate(d.date),
           "למי נופק": d.deliveredTo || "",
-          "מקטים": itemSKUs,
-          "מוצרים": itemNames,
-          "כמויות": itemQtys,
-          "חתימה": d.signature ? "כן" : "לא",
+          מקטים: itemSKUs,
+          מוצרים: itemNames,
+          כמויות: itemQtys,
+          חתימה: d.signature ? "כן" : "לא",
         });
       });
     });
@@ -150,14 +183,19 @@ export default function DeliveriesList() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "ניפוקים");
     const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-    saveAs(new Blob([wbout], { type: "application/octet-stream" }), "deliveries.xlsx");
+    saveAs(
+      new Blob([wbout], { type: "application/octet-stream" }),
+      "deliveries.xlsx"
+    );
   };
 
   return (
     <div className="dl-root" dir="rtl">
       <div className="dl-header">
         <h2>רשימת ניפוקים לפי לקוח</h2>
-        <button className="dl-btn primary" onClick={exportToExcel}>ייצוא לאקסל</button>
+        <button className="dl-btn primary" onClick={exportToExcel}>
+          ייצוא לאקסל
+        </button>
       </div>
 
       <div className="dl-filter">
@@ -169,7 +207,9 @@ export default function DeliveriesList() {
         >
           <option value="">הצג הכל</option>
           {customerOptions.map((cn) => (
-            <option value={cn} key={cn}>{cn}</option>
+            <option value={cn} key={cn}>
+              {cn}
+            </option>
           ))}
         </select>
       </div>
@@ -193,22 +233,29 @@ export default function DeliveriesList() {
             <tbody>
               {group.deliveries.map((delivery, idx) => (
                 <tr key={delivery._id || delivery.id || idx}>
-                  <td>{formatDate(delivery.date)}</td>
-                  <td>{delivery.deliveredTo || "—"}</td>
-                  <td>
+                  <td data-label="תאריך">{formatDate(delivery.date)}</td>
+                  <td data-label="למי נופק">{delivery.deliveredTo || "—"}</td>
+                  <td data-label="פריטים">
                     <ItemsMiniTable
                       items={delivery.items}
                       getName={getProductName}
                       getSku={getProductSku}
                     />
                   </td>
-                  <td style={{ textAlign: "center" }}>
+                  <td
+                    data-label="חתימה"
+                    style={{ textAlign: "center", verticalAlign: "middle" }}
+                  >
                     {delivery.signature ? (
                       <button
                         className="dl-pdf-btn"
-                        onClick={() => handleDownloadReceipt(delivery._id || delivery.id)}
+                        onClick={() =>
+                          handleDownloadReceipt(delivery._id || delivery.id)
+                        }
                       >
-                        <PictureAsPdfIcon style={{ color: "red", verticalAlign: "middle" }} />
+                        <PictureAsPdfIcon
+                          style={{ color: "red", verticalAlign: "middle" }}
+                        />
                       </button>
                     ) : (
                       "—"
@@ -220,6 +267,12 @@ export default function DeliveriesList() {
           </table>
         </div>
       ))}
+
+      {showScrollTop && (
+        <button className="scroll-top-btn" onClick={scrollToTop}>
+          <ArrowUpwardIcon />
+        </button>
+      )}
     </div>
   );
 }
