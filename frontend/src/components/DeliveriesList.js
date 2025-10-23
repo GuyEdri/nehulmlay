@@ -1,21 +1,23 @@
-import React, { useEffect, useState, useMemo } from "react";
+// frontend/src/components/DeliveriesList.js
+import React, { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import _ from "lodash";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
-import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
+import UndoIcon from "@mui/icons-material/Undo";
+import CloseIcon from "@mui/icons-material/Close";
 import { api } from "../api";
+import AddReturn from "./AddReturn";
 import "./deliveries-list.css";
 
-// --- פונקציות עזר לתאריכים ---
+// עזרי תאריך
 const toDate = (date) => {
   try {
     if (!date) return null;
     if (typeof date === "object") {
       const sec = date.seconds ?? date._seconds;
       const nsec = date.nanoseconds ?? date._nanoseconds ?? 0;
-      if (typeof sec === "number")
-        return new Date(sec * 1000 + Math.floor(nsec / 1e6));
+      if (typeof sec === "number") return new Date(sec * 1000 + Math.floor(nsec / 1e6));
     }
     const d = new Date(date);
     return Number.isNaN(d.getTime()) ? null : d;
@@ -36,11 +38,9 @@ const formatDate = (date) => {
   });
 };
 
-// טבלת פריטים קטנה
+// טבלת פריטים קטנה (RTL)
 function ItemsMiniTable({ items, getName, getSku }) {
-  if (!Array.isArray(items) || items.length === 0)
-    return <div className="dl-empty">—</div>;
-
+  if (!Array.isArray(items) || items.length === 0) return <div className="dl-empty">—</div>;
   return (
     <table className="dl-items-table" dir="rtl">
       <thead>
@@ -67,7 +67,10 @@ export default function DeliveriesList() {
   const [deliveries, setDeliveries] = useState([]);
   const [products, setProducts] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState("");
-  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  // מודאל זיכוי
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [prefillForReturn, setPrefillForReturn] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -85,65 +88,51 @@ export default function DeliveriesList() {
     })();
   }, []);
 
-  // תצוגת כפתור "חזרה למעלה"
-  useEffect(() => {
-    const handleScroll = () => {
-      setShowScrollTop(window.scrollY > 300);
-    };
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
+  // מפה מהירה של מוצרים
   const productMap = useMemo(() => {
     const m = new Map();
-    products.forEach((p) =>
-      m.set(String(p._id || p.id), { name: p.name, sku: p.sku || "" })
-    );
+    products.forEach((p) => {
+      const id = String(p._id || p.id);
+      m.set(id, {
+        name: p.name || "",
+        sku: p.sku || "",
+        warehouseId: p.warehouseId || "",
+      });
+    });
     return m;
   }, [products]);
 
   const getProductName = (id) => productMap.get(String(id))?.name || String(id);
   const getProductSku = (id) => productMap.get(String(id))?.sku || "";
+  const getProductWh = (id) => productMap.get(String(id))?.warehouseId || "";
 
+  // לקוחות לבחירה
   const customerOptions = useMemo(
     () => _.uniq(deliveries.map((d) => d.customerName).filter(Boolean)).sort(),
     [deliveries]
   );
 
+  // סינון לפי לקוח
   const filteredDeliveries = useMemo(
-    () =>
-      selectedCustomer
-        ? deliveries.filter((d) => d.customerName === selectedCustomer)
-        : deliveries,
+    () => (selectedCustomer ? deliveries.filter((d) => d.customerName === selectedCustomer) : deliveries),
     [deliveries, selectedCustomer]
   );
 
-  const groupedAndSorted = useMemo(() => {
+  // קיבוץ לפי לקוח + מיון תאריכים
+  const grouped = useMemo(() => {
     return _(filteredDeliveries)
       .groupBy((d) => d.customerName || "ללא שם לקוח")
       .map((items, customerName) => ({
         customerName,
-        deliveries: _.orderBy(
-          items,
-          (d) => toDate(d?.date)?.getTime() ?? 0,
-          ["desc"]
-        ),
+        deliveries: _.orderBy(items, (d) => toDate(d?.date)?.getTime() ?? 0, ["desc"]),
       }))
-      .orderBy("customerName", ["asc"])
       .value();
   }, [filteredDeliveries]);
 
+  // הורדת PDF
   const handleDownloadReceipt = async (deliveryId) => {
     try {
-      const res = await api.post(
-        `/api/deliveries/${deliveryId}/receipt`,
-        {},
-        { responseType: "blob" }
-      );
+      const res = await api.post(`/api/deliveries/${deliveryId}/receipt`, {}, { responseType: "blob" });
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement("a");
       link.href = url;
@@ -157,25 +146,61 @@ export default function DeliveriesList() {
     }
   };
 
+  // לחיצה על "זיכוי" — בונים prefill ל־AddReturn
+  const handleCredit = (delivery) => {
+    // נעדיף להחזיר למחסן המקורי של הניפוק
+    const warehouseId = String(delivery.warehouseId || "");
+    // "הוחזר ע"י" יהיה מי שנופק לו
+    const returnedBy = String(delivery.deliveredTo || "");
+    // אם יש מזהה לקוח, נעביר אותו + השם
+    const customerId = String(delivery.customer || "");
+    const customerName = String(delivery.customerName || "");
+
+    // פריטים מראש עם productId וכמות; נוסיף גם תווית לתצוגה (שם + מק"ט)
+    const rows = (delivery.items || []).map((it) => {
+      const pid = String(it.product || "");
+      const name = getProductName(pid);
+      const sku = getProductSku(pid);
+      return {
+        productId: pid,
+        productLabel: `${name}${sku ? ` (${sku})` : ""}`,
+        searchTerm: `${name}${sku ? ` (${sku})` : ""}`,
+        suggestions: [],
+        quantity: Number(it.quantity || 1),
+        manualSku: "",
+        manualName: "",
+      };
+    });
+
+    setPrefillForReturn({
+      warehouseId,
+      customerId,
+      customerName,
+      returnedBy,
+      date: new Date().toISOString().slice(0, 16), // עכשיו
+      personalNumber: "",
+      notes: `זיכוי אוטומטי מניפוק ${delivery._id || delivery.id || ""}`,
+      rows,
+    });
+    setShowReturnModal(true);
+  };
+
+  // ייצוא אקסל
   const exportToExcel = () => {
     const rows = [];
-    groupedAndSorted.forEach((group) => {
+    grouped.forEach((group) => {
       group.deliveries.forEach((d) => {
-        const itemSKUs =
-          d.items?.map((it) => getProductSku(it.product) || "—").join(", ") ||
-          "";
-        const itemNames =
-          d.items?.map((it) => getProductName(it.product)).join(", ") || "";
-        const itemQtys =
-          d.items?.map((it) => it.quantity).join(", ") || "";
+        const itemSKUs = d.items?.map((it) => getProductSku(it.product) || "—").join(", ") || "";
+        const itemNames = d.items?.map((it) => getProductName(it.product)).join(", ") || "";
+        const itemQtys = d.items?.map((it) => it.quantity).join(", ") || "";
         rows.push({
-          לקוח: group.customerName,
-          תאריך: formatDate(d.date),
+          "לקוח": group.customerName,
+          "תאריך": formatDate(d.date),
           "למי נופק": d.deliveredTo || "",
-          מקטים: itemSKUs,
-          מוצרים: itemNames,
-          כמויות: itemQtys,
-          חתימה: d.signature ? "כן" : "לא",
+          "מקטים": itemSKUs,
+          "מוצרים": itemNames,
+          "כמויות": itemQtys,
+          "חתימה": d.signature ? "כן" : "לא",
         });
       });
     });
@@ -183,95 +208,82 @@ export default function DeliveriesList() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "ניפוקים");
     const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-    saveAs(
-      new Blob([wbout], { type: "application/octet-stream" }),
-      "deliveries.xlsx"
-    );
+    saveAs(new Blob([wbout], { type: "application/octet-stream" }), "deliveries.xlsx");
   };
 
   return (
     <div className="dl-root" dir="rtl">
+      {/* כותרת + ייצוא */}
       <div className="dl-header">
         <h2>רשימת ניפוקים לפי לקוח</h2>
-        <button className="dl-btn primary" onClick={exportToExcel}>
-          ייצוא לאקסל
-        </button>
+        <button className="dl-btn primary" onClick={exportToExcel}>ייצוא לאקסל</button>
       </div>
 
+      {/* סינון לקוח */}
       <div className="dl-filter">
         <label>סנן לפי לקוח:</label>
-        <select
-          className="dl-select"
-          value={selectedCustomer}
-          onChange={(e) => setSelectedCustomer(e.target.value)}
-        >
+        <select className="dl-select" value={selectedCustomer} onChange={(e) => setSelectedCustomer(e.target.value)}>
           <option value="">הצג הכל</option>
           {customerOptions.map((cn) => (
-            <option value={cn} key={cn}>
-              {cn}
-            </option>
+            <option key={cn} value={cn}>{cn}</option>
           ))}
         </select>
       </div>
 
-      {groupedAndSorted.length === 0 && (
-        <div className="dl-empty">לא נמצאו ניפוקים</div>
-      )}
-
-      {groupedAndSorted.map((group) => (
+      {/* קבוצות לפי לקוח */}
+      {grouped.map((group) => (
         <div key={group.customerName} className="dl-group">
-          <h3>{group.customerName}</h3>
-          <table className="dl-table" dir="rtl">
-            <thead>
-              <tr>
-                <th>תאריך</th>
-                <th>למי נופק</th>
-                <th>פריטים (מקט | שם מוצר | כמות)</th>
-                <th>חתימה</th>
-              </tr>
-            </thead>
-            <tbody>
-              {group.deliveries.map((delivery, idx) => (
-                <tr key={delivery._id || delivery.id || idx}>
-                  <td data-label="תאריך">{formatDate(delivery.date)}</td>
-                  <td data-label="למי נופק">{delivery.deliveredTo || "—"}</td>
-                  <td data-label="פריטים">
-                    <ItemsMiniTable
-                      items={delivery.items}
-                      getName={getProductName}
-                      getSku={getProductSku}
-                    />
-                  </td>
-                  <td
-                    data-label="חתימה"
-                    style={{ textAlign: "center", verticalAlign: "middle" }}
-                  >
-                    {delivery.signature ? (
-                      <button
-                        className="dl-pdf-btn"
-                        onClick={() =>
-                          handleDownloadReceipt(delivery._id || delivery.id)
-                        }
-                      >
-                        <PictureAsPdfIcon
-                          style={{ color: "red", verticalAlign: "middle" }}
-                        />
-                      </button>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="dl-group-header">
+            <h3>{group.customerName}</h3>
+          </div>
+
+          {group.deliveries.map((delivery, idx) => (
+            <div key={delivery._id || delivery.id || idx} className="dl-card">
+              <div className="dl-card-row"><span>תאריך:</span> {formatDate(delivery.date)}</div>
+              <div className="dl-card-row"><span>למי נופק:</span> {delivery.deliveredTo || "—"}</div>
+              <div className="dl-card-row">
+                <span>פריטים:</span>
+                <ItemsMiniTable items={delivery.items} getName={getProductName} getSku={getProductSku} />
+              </div>
+
+              <div className="dl-card-actions">
+                {delivery.signature ? (
+                  <button className="dl-icon-btn" onClick={() => handleDownloadReceipt(delivery._id || delivery.id)} title="הורד קבלה PDF">
+                    <PictureAsPdfIcon style={{ color: "red" }} />
+                  </button>
+                ) : (
+                  <span>—</span>
+                )}
+                <button className="dl-btn secondary" onClick={() => handleCredit(delivery)}>
+                  <UndoIcon style={{ marginLeft: 6 }} />
+                  זיכוי
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       ))}
 
-      {showScrollTop && (
-        <button className="scroll-top-btn" onClick={scrollToTop}>
-          <ArrowUpwardIcon />
-        </button>
+      {/* מודאל: טופס זיכוי ממולא מראש */}
+      {showReturnModal && (
+        <div className="modal-backdrop" onClick={() => setShowReturnModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} dir="rtl">
+            <div className="modal-header">
+              <h3>זיכוי מלאי (מניפוק קיים)</h3>
+              <button className="close-btn" onClick={() => setShowReturnModal(false)} aria-label="סגור">
+                <CloseIcon />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {/* מעבירים ל-AddReturn את ה-prefill */}
+              <AddReturn
+                onCreated={() => setShowReturnModal(false)}
+                prefill={prefillForReturn}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
