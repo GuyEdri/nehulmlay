@@ -67,7 +67,7 @@ async function hydrateItemsWithWarehouseName(items = []) {
  *               GETs
  * ======================================= */
 
-// GET /api/deliveries  (מחזיר את כל הניפוקים; מעשיר שם מחסן לפריטים)
+// GET /api/deliveries
 router.get("/", async (_req, res) => {
   try {
     const deliveries = await getAllDeliveries();
@@ -76,6 +76,7 @@ router.get("/", async (_req, res) => {
         const wid = String(d?.warehouseId || "").trim();
         const wname = d?.warehouseName || (await resolveWarehouseNameById(wid));
         const items = await hydrateItemsWithWarehouseName(d.items || []);
+        // manualItems לא נוגעים במחסן (הן ידניות)
         return { ...d, warehouseId: wid, warehouseName: String(wname || ""), items };
       })
     );
@@ -85,7 +86,7 @@ router.get("/", async (_req, res) => {
   }
 });
 
-// GET /api/deliveries/:id  (מעשיר שם מחסן לפריטים)
+// GET /api/deliveries/:id
 router.get("/:id", async (req, res) => {
   try {
     const d = await getDeliveryById(req.params.id);
@@ -103,28 +104,81 @@ router.get("/:id", async (req, res) => {
  *            יצירת ניפוק
  * ======================================= */
 
+// מיפוי אליאסים מהקליינט
+function pickBody(reqBody = {}) {
+  const b = reqBody || {};
+  // אליאסים לשדות עליונים
+  const deliveredTo =
+    b.deliveredTo ?? b.delivered_to ?? "";
+  const personalNumber =
+    b.personalNumber ?? b.personal_number ?? "";
+  const signature =
+    b.signature ?? b.signatureData ?? "";
+  const customer =
+    b.customer ?? b.customerId ?? "";
+  const customerName = b.customerName ?? "";
+
+  // אליאסים לפריטים
+  const itemsRaw = Array.isArray(b.items) ? b.items : [];
+  const items = itemsRaw.map((row) => ({
+    product: row.product ?? row.productId ?? "",
+    quantity: Number(row.quantity ?? 0),
+    // נרשה גם per-item שיוך מחסן (לא חובה)
+    warehouseId: row.warehouseId ? String(row.warehouseId) : undefined,
+    warehouseName: row.warehouseName ? String(row.warehouseName) : undefined,
+  }));
+
+  const manualItems = Array.isArray(b.manualItems)
+    ? b.manualItems.map((m) => ({
+        name: String(m.name || "").trim(),
+        sku: String(m.sku || "").trim(),
+        quantity: Number(m.quantity || 0),
+      }))
+    : [];
+
+  const warehouseId = String(b.warehouseId || b.warehouse || "").trim();
+  const date = b.date;
+
+  return {
+    warehouseId,
+    customer,
+    customerName,
+    deliveredTo,
+    items,
+    manualItems,
+    signature,
+    date,
+    personalNumber,
+  };
+}
+
 // POST /api/deliveries
 router.post("/", async (req, res) => {
   try {
     const {
-      warehouseId = "",        // מחסן מקור (רשות; אם ריק – אין אילוץ שייכות)
+      warehouseId,
       customer,
       customerName,
       deliveredTo,
-      items,
+      items = [],
+      manualItems = [],
       signature,
       date,
       personalNumber,
-    } = req.body;
+    } = pickBody(req.body);
 
-    if (!customer || !customerName || !deliveredTo || !Array.isArray(items) || items.length === 0 || !signature) {
+    // ולידציית חובה
+    if (!customer || !customerName || !deliveredTo || !signature) {
       return res.status(400).json({ error: "שדות חובה חסרים" });
+    }
+    if ((!Array.isArray(items) || items.length === 0) && (!Array.isArray(manualItems) || manualItems.length === 0)) {
+      return res.status(400).json({ error: "אין פריטים לניפוק" });
     }
 
     const cleanWarehouseId = String(warehouseId || "").trim();
     const resolvedWarehouseName = await resolveWarehouseNameById(cleanWarehouseId);
 
-    // ולידציה: קיום מוצרים, מחסן (אם נבחר), ומלאי מספיק
+    // ולידציה לפריטי קטלוג בלבד (מוצרים קיימים + מלאי מספיק)
     for (const row of items) {
       if (!row?.product) return res.status(400).json({ error: "חסר מזהה מוצר בשורה" });
       const qty = Number(row.quantity);
@@ -147,7 +201,18 @@ router.post("/", async (req, res) => {
       }
     }
 
-    // הפחתת מלאי
+    // ולידציה לפריטים ידניים (שם + כמות חיובית)
+    for (const mi of manualItems) {
+      const q = Number(mi.quantity);
+      if (!mi.name || !mi.name.trim()) {
+        return res.status(400).json({ error: "בפריט ידני יש למלא 'שם פריט'." });
+      }
+      if (!Number.isFinite(q) || q < 1) {
+        return res.status(400).json({ error: "כמות בפריט ידני חייבת להיות מספר חיובי" });
+      }
+    }
+
+    // הפחתת מלאי — רק לפריטי קטלוג
     for (const row of items) {
       await updateProductStock(String(row.product), -Number(row.quantity));
     }
@@ -159,7 +224,7 @@ router.post("/", async (req, res) => {
 
     // בניית items עם שם מחסן (אם יש)
     const cleanItems = await Promise.all(
-      items.map(async (i) => {
+      (items || []).map(async (i) => {
         const wid = cleanWarehouseId || String(i.warehouseId || "").trim();
         const wname =
           cleanWarehouseId
@@ -174,13 +239,21 @@ router.post("/", async (req, res) => {
       })
     );
 
+    // פריטים ידניים נשמרים כפי שהם (אין שינוי מלאי)
+    const cleanManuals = (manualItems || []).map((m) => ({
+      name: String(m.name || "").trim(),
+      sku: String(m.sku || "").trim(),
+      quantity: Number(m.quantity || 0),
+    }));
+
     const deliveryData = {
-      warehouseId: cleanWarehouseId,                   // נשמר ברמת הניפוק
-      warehouseName: resolvedWarehouseName || "",      // ושם המחסן לנוחות
+      warehouseId: cleanWarehouseId,
+      warehouseName: resolvedWarehouseName || "",
       customer: String(customer),
       customerName: String(customerName),
       deliveredTo: String(deliveredTo),
-      items: cleanItems,
+      items: cleanItems,              // פריטי קטלוג
+      manualItems: cleanManuals,      // פריטים ידניים
       signature: String(signature),
       date: date ? new Date(date) : new Date(),
       personalNumber: personalNumber ? String(personalNumber) : "",
@@ -200,10 +273,9 @@ router.post("/", async (req, res) => {
  *      קבלה PDF — הזרמה ישירה (Streaming)
  * ======================================= */
 
-// POST /api/deliveries/:id/receipt
 router.post("/:id/receipt", async (req, res) => {
   try {
-    let signature = req.body?.signature;
+    let signature = req.body?.signature ?? req.body?.signatureData;
     const delivery = await getDeliveryById(req.params.id);
     if (!delivery) return res.status(404).json({ error: "לא נמצא ניפוק" });
     if (!signature) signature = delivery.signature;
@@ -226,10 +298,10 @@ router.post("/:id/receipt", async (req, res) => {
       wname = await resolveWarehouseNameById(wid);
     }
 
-    // פרטי מוצרים
+    // פרטי מוצרים: גם קטלוגיים וגם ידניים
     let products = [];
     try {
-      products = await Promise.all(
+      const catalog = await Promise.all(
         (delivery.items || []).map(async (item) => {
           try {
             const prod = await getProductById(item.product);
@@ -243,16 +315,20 @@ router.post("/:id/receipt", async (req, res) => {
           }
         })
       );
+
+      const manuals = (delivery.manualItems || []).map((m) => ({
+        name: m.name || "פריט ידני",
+        sku: m.sku || "",
+        quantity: m.quantity,
+      }));
+
+      products = [...catalog, ...manuals];
     } catch {
       products = [];
     }
 
-    // כותרות תשובה
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename=receipt_${req.params.id}.pdf`
-    );
+    res.setHeader("Content-Disposition", `attachment; filename=receipt_${req.params.id}.pdf`);
 
     const doc = new PDFDocument({ size: "A4", margin: 40 });
     doc.on("error", (e) => {
@@ -262,7 +338,7 @@ router.post("/:id/receipt", async (req, res) => {
     });
     doc.pipe(res);
 
-    // פונט עברית (אופציונלי)
+    // פונט עברית (אם קיים)
     try {
       const fontPath = path.resolve(__dirname, "../fonts/noto.ttf");
       doc.registerFont("hebrew", fontPath);
@@ -283,9 +359,8 @@ router.post("/:id/receipt", async (req, res) => {
 
     // פרמטרי עמוד
     const pageWidth = doc.page.width;
-    const pageHeight = doc.page.height;
-    const { left, right, top, bottom } = doc.page.margins;
-    const contentWidth = pageWidth - left - right;
+    const { right, top, bottom } = doc.page.margins;
+    const contentWidth = pageWidth - doc.page.margins.left - right;
     const tableRightX = pageWidth - right;
 
     // כותרת
@@ -315,98 +390,63 @@ router.post("/:id/receipt", async (req, res) => {
         })
       : "";
     rtlText(`תאריך: ${dateText}`);
-
     doc.moveDown(1);
 
-    // --------------------------------------------------------
-    // טבלת מוצרים — סדר RTL: מק״ט (ימין) | שם מוצר | כמות (שמאל)
-    // --------------------------------------------------------
-    const skuW = 120;  // מק״ט — הימני ביותר
-    const nameW = Math.max(120, contentWidth - skuW - 70);
-    const qtyW = 70;   // כמות — השמאלי ביותר
+    // טבלת מוצרים
+    const skuW = 120;
+    const qtyW = 70;
+    const nameW = Math.max(120, contentWidth - skuW - qtyW);
 
     let y = doc.y + 6;
     const rowH = 24;
 
     const drawHeader = () => {
-      // רקע שורה
       doc.save();
       doc.fillColor("#f0f0f0");
-      doc
-        .rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH)
-        .fill();
+      doc.rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH).fill();
       doc.restore();
 
-      // מסגרת
-      doc
-        .lineWidth(0.5)
-        .strokeColor("#888")
+      doc.lineWidth(0.5).strokeColor("#888")
         .rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH)
         .stroke();
 
-      // כותרות עמודות
       doc.fontSize(12).fillColor("#000");
-
-      // מק״ט (ימין)
       doc.text("מקט", tableRightX - skuW, y + 6, { width: skuW - 6, align: "right" });
-
-      // שם מוצר (אמצע) — RTL בפונקציה ייעודית
       rtlTextAt("שם\u00A0מוצר", tableRightX - skuW, y + 6, nameW - 6);
-
-      // כמות (שמאל)
-      doc.text("כמות", tableRightX - (skuW + nameW + qtyW) + 6, y + 6, {
-        width: qtyW - 6,
-        align: "right",
-      });
+      doc.text("כמות", tableRightX - (skuW + nameW + qtyW) + 6, y + 6, { width: qtyW - 6, align: "right" });
 
       y += rowH;
     };
 
-    const drawRow = (row) => {
-      if (y + rowH > pageHeight - bottom) {
+    const maybeNewPage = () => {
+      if (y + rowH > doc.page.height - bottom) {
         doc.addPage();
         y = top;
         drawHeader();
       }
-
-      // מסגרת לשורה
-      doc
-        .lineWidth(0.3)
-        .strokeColor("#ccc")
-        .rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH)
-        .stroke();
-
-      doc.fontSize(12).fillColor("#000");
-
-      // מק״ט (ימין)
-      doc.text(String(row.sku || "—"), tableRightX - skuW, y + 6, {
-        width: skuW - 6,
-        align: "right",
-      });
-
-      // שם מוצר (אמצע) — RTL
-      rtlTextAt(String(row.name ?? ""), tableRightX - skuW, y + 6, nameW - 6);
-
-      // כמות (שמאל)
-      doc.text(String(row.quantity ?? ""), tableRightX - (skuW + nameW + qtyW) + 6, y + 6, {
-        width: qtyW - 6,
-        align: "right",
-      });
-
-      y += rowH;
     };
 
     drawHeader();
     if (!Array.isArray(products) || products.length === 0) {
-      doc
-        .lineWidth(0.3)
-        .strokeColor("#ccc")
+      doc.lineWidth(0.3).strokeColor("#ccc")
         .rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH)
         .stroke();
       rtlTextAt("לא נבחרו מוצרים", tableRightX - skuW, y + 6, nameW - 6);
       y += rowH;
     } else {
-      products.forEach(drawRow);
+      for (const row of products) {
+        maybeNewPage();
+        doc.lineWidth(0.3).strokeColor("#ccc")
+          .rect(tableRightX - (skuW + nameW + qtyW), y, (skuW + nameW + qtyW), rowH)
+          .stroke();
+
+        doc.fontSize(12).fillColor("#000");
+        doc.text(String(row.sku || "—"), tableRightX - skuW, y + 6, { width: skuW - 6, align: "right" });
+        rtlTextAt(String(row.name ?? ""), tableRightX - skuW, y + 6, nameW - 6);
+        doc.text(String(row.quantity ?? ""), tableRightX - (skuW + nameW + qtyW) + 6, y + 6, { width: qtyW - 6, align: "right" });
+
+        y += rowH;
+      }
     }
 
     y += 8;
@@ -414,12 +454,13 @@ router.post("/:id/receipt", async (req, res) => {
 
     doc.fontSize(14);
     rtlText("חתימה:");
-    if (signature && typeof signature === "string" && signature.startsWith("data:image")) {
+    const sig = signature && typeof signature === "string" ? signature : "";
+    if (sig.startsWith("data:image")) {
       try {
-        const b64 = signature.replace(/^data:image\/\w+;base64,/, "");
+        const b64 = sig.replace(/^data:image\/\w+;base64,/, "");
         const sigBuffer = Buffer.from(b64, "base64");
         const imgWidth = 160;
-        const x = pageWidth - right - imgWidth;
+        const x = pageWidth - doc.page.margins.right - imgWidth;
         const yImg = doc.y + 6;
         doc.image(sigBuffer, x, yImg, { width: imgWidth });
         doc.moveDown(4);
@@ -447,7 +488,6 @@ router.post("/:id/receipt", async (req, res) => {
  *        עדכון ומחיקה של ניפוק
  * ======================================= */
 
-// PUT /api/deliveries/:id
 router.put("/:id", async (req, res) => {
   try {
     const updates = { ...(req.body || {}) };
@@ -478,7 +518,6 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// DELETE /api/deliveries/:id
 router.delete("/:id", async (req, res) => {
   try {
     await deleteDelivery(req.params.id);
@@ -489,4 +528,3 @@ router.delete("/:id", async (req, res) => {
 });
 
 export default router;
-
