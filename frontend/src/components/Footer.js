@@ -41,9 +41,7 @@ export default function Footer() {
       onMouseLeave={() => setHover(false)}
     >
       <div style={footerStyles.inner}>
-        פותח באהבה
-        <span style={footerStyles.heart}>❤️</span>
-        ע״י <strong>גיא אדרי</strong>   2025
+        האפליקציה פותחה ע"י <strong>גיא אדרי</strong> 2025
       </div>
     </footer>
   );
