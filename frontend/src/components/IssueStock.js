@@ -96,6 +96,7 @@ const styles = {
     border: "1px solid #fecaca",
     borderRadius: 10,
     padding: "10px 12px",
+    whiteSpace: "pre-wrap",
   },
   alertSuccess: {
     background: "#dcfce7",
@@ -143,8 +144,8 @@ const styles = {
 
 export default function IssueStock({ onIssued }) {
   const [warehouses, setWarehouses] = useState([]);
-  const [warehouseId, setWarehouseId] = useState(""); // מחסן מקור
-  const [allowNoWarehouse, setAllowNoWarehouse] = useState(false); // ניפוק ידני ללא מחסן
+  const [warehouseId, setWarehouseId] = useState("");
+  const [allowNoWarehouse, setAllowNoWarehouse] = useState(false);
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [customer, setCustomer] = useState("");
@@ -189,7 +190,6 @@ export default function IssueStock({ onIssued }) {
           setProducts([]);
           return;
         }
-        // אם צד השרת שלך מצפה ל-warehouse (ולא warehouseId) עדכן כאן בהתאם.
         const res = await api.get("/api/products", { params: { warehouseId } });
         if (!mounted) return;
         setProducts(Array.isArray(res.data) ? res.data : []);
@@ -321,17 +321,41 @@ export default function IssueStock({ onIssued }) {
       );
       const customerName = selectedCustomerObj ? selectedCustomerObj.name : "";
 
-      const body = {
-        warehouseId: allowNoWarehouse ? "" : warehouseId,
-        noWarehouse: !!allowNoWarehouse, // אופציונלי לשרת
-        items: catalogItems,              // רק פריטי קטלוג עם productId
-        manualItems,                      // פריטים ידניים ללא productId
-        signature,
-        deliveredTo,
-        customer: String(customer),
-        customerName,
+      // בונים payload שמכסה גם צורות שמות נפוצות שהשרתים דורשים
+      const base = {
+        // שדות חובה לוגיים
+        items: catalogItems,
+        manualItems,
+
+        // מזהי ישות
+        customerId: String(customer),
+        customer: String(customer), // להשאיר תאימות אם השרת מצפה ל"customer"
+
+        // נתוני ניפוק
+        deliveredTo: deliveredTo.trim(),
+        delivered_to: deliveredTo.trim(), // תאימות לנחשי-snake_case
         personalNumber: personalNumber.trim(),
+        personal_number: personalNumber.trim(), // תאימות
+        signature,
+        signatureData: signature, // תאימות
+
+        // שדות מידע משלימים
+        customerName,
       };
+
+      // warehouseId יישלח רק אם יש (כדי לא להפיל ולידציה על ערך ריק)
+      if (!allowNoWarehouse && warehouseId) {
+        base.warehouseId = warehouseId;
+      } else {
+        base.noWarehouse = true;
+      }
+
+      const body = base;
+
+      // דיבוג: לראות מה יוצא
+      // (רק בזמן פיתוח; אפשר להסיר בפרודקשן)
+      // eslint-disable-next-line no-console
+      console.log("DELIVERY PAYLOAD", body);
 
       await api.post("/api/deliveries", body);
 
@@ -351,7 +375,13 @@ export default function IssueStock({ onIssued }) {
       setSignature(null);
       if (onIssued) onIssued();
     } catch (err) {
-      setError(err?.response?.data?.error || "שגיאה בניפוק");
+      // הצגת פירוט שגיאה אם קיים
+      const srv = err?.response?.data;
+      const details =
+        typeof srv === "object" ? JSON.stringify(srv, null, 2) :
+        typeof srv === "string" ? srv :
+        (err?.message || "");
+      setError(`שגיאה בניפוק.\n${details}`);
     } finally {
       setLoading(false);
     }
@@ -365,7 +395,7 @@ export default function IssueStock({ onIssued }) {
 
         <form onSubmit={handleIssue} style={styles.form} dir="rtl">
           {/* מצב ידני */}
-          <div style={{ ...styles.row, ...{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, background: "#fafafa" } }}>
+          <div style={{ ...styles.row, ...styles.sectionBox }}>
             <div style={styles.switchRow}>
               <input
                 id="manual-switch"
