@@ -106,7 +106,6 @@ const mobileCss = `
 
 function sanitizeSheetName(name) {
   if (!name) return "Sheet";
-  // גליון אקסל: איסור על: : \ / ? * [ ] ו-אורך עד 31
   const cleaned = String(name).replace(/[:\\/?*\[\]]/g, "_");
   return cleaned.length > 31 ? cleaned.slice(0, 31) : cleaned;
 }
@@ -115,6 +114,15 @@ function formatNowSuffix() {
   const d = new Date();
   const pad = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
+
+function formatDate(x) {
+  try {
+    const d = x ? new Date(x) : null;
+    if (!d || isNaN(d.getTime())) return "";
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch { return ""; }
 }
 
 export default function Warehouses() {
@@ -212,39 +220,84 @@ export default function Warehouses() {
   };
 
   // =======================
-  // Excel Export Helpers
+  // Excel Export: ITEMS per warehouse
   // =======================
-  const whToRows = (w) => {
-    const id = String(w._id || w.id || "");
-    return [
-      { שדה: "מזהה", ערך: id },
-      { שדה: "שם", ערך: w.name || "" },
-      { שדה: "כתובת", ערך: w.address || "" },
-      { שדה: "הערות", ערך: w.notes || "" },
-    ];
+
+  // המרת אובייקט פריט לשורה באקסל (בעברית + סדר עמודות)
+  const itemToRow = (it) => {
+    // תמיכה בשמות שדות שונים — שנה כאן לפי ה־API שלך במידת הצורך
+    return {
+      "SKU": it.sku ?? it.SKU ?? "",
+      "שם פריט": it.name ?? it.itemName ?? "",
+      "כמות": it.quantity ?? it.qty ?? 0,
+      "יחידה": it.unit ?? it.uom ?? "",
+      "מיקום במחסן": it.location ?? it.bin ?? "",
+      "מינימום מלאי": it.minStock ?? it.minimum ?? "",
+      "הערות": it.notes ?? "",
+      "עודכן בתאריך": formatDate(it.updatedAt ?? it.updated_at ?? it.lastUpdated),
+      "מזהה פריט": String(it.id ?? it._id ?? ""),
+    };
   };
 
-  const exportWarehouse = (w) => {
-    // גיליון אחד עם פרטי המחסן
-    const ws = XLSX.utils.json_to_sheet(whToRows(w));
-    // יצירה + כתיבה
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, sanitizeSheetName(w.name || "מחסן"));
-    XLSX.writeFile(wb, `warehouse_${(w.name || "unnamed").trim() || "unnamed"}_${formatNowSuffix()}.xlsx`);
+  const fetchItemsForWarehouse = async (wid) => {
+    // מצפה ל: GET /api/warehouses/:id/items  ->  Array<item>
+    const res = await api.get(`/api/warehouses/${wid}/items`);
+    const items = Array.isArray(res.data) ? res.data : [];
+    return items;
   };
 
-  const exportAllWarehousesMultiSheets = () => {
-    if (!Array.isArray(list) || list.length === 0) return;
+  const exportWarehouseItems = async (w) => {
+    try {
+      const wid = String(w._id || w.id);
+      const items = await fetchItemsForWarehouse(wid);
 
-    const wb = XLSX.utils.book_new();
+      const dataRows = items.length
+        ? items.map(itemToRow)
+        : [{ "SKU": "", "שם פריט": "אין פריטים", "כמות": "", "יחידה": "", "מיקום במחסן": "", "מינימום מלאי": "", "הערות": "", "עודכן בתאריך": "", "מזהה פריט": "" }];
 
-    list.forEach((w, idx) => {
-      const ws = XLSX.utils.json_to_sheet(whToRows(w));
-      const nameRaw = (w.name || `מחסן_${idx + 1}`).trim();
-      XLSX.utils.book_append_sheet(wb, ws, sanitizeSheetName(nameRaw || `מחסן_${idx + 1}`));
-    });
+      const ws = XLSX.utils.json_to_sheet(dataRows, { header: Object.keys(dataRows[0]) });
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, sanitizeSheetName(w.name || "מחסן"));
 
-    XLSX.writeFile(wb, `warehouses_${formatNowSuffix()}.xlsx`);
+      XLSX.writeFile(wb, `warehouse_items_${(w.name || "unnamed").trim() || "unnamed"}_${formatNowSuffix()}.xlsx`);
+    } catch (e) {
+      console.error("Export warehouse items failed:", e);
+      setErr("שגיאה בייצוא תכולת המחסן");
+    }
+  };
+
+  const exportAllWarehousesItemsMultiSheets = async () => {
+    try {
+      if (!Array.isArray(list) || list.length === 0) return;
+
+      const wb = XLSX.utils.book_new();
+
+      // טוען פריטים לכל מחסן ברצף (אפשר לשפר ל־Promise.all אם ה־API והדפדפן עומדים בזה)
+      for (let idx = 0; idx < list.length; idx++) {
+        const w = list[idx];
+        const wid = String(w._id || w.id);
+        let items = [];
+        try {
+          items = await fetchItemsForWarehouse(wid);
+        } catch (e) {
+          // אם יש שגיאה במחסן מסוים — נייצא גיליון ריק עם שורת שגיאה
+          items = [];
+        }
+
+        const dataRows = items.length
+          ? items.map(itemToRow)
+          : [{ "SKU": "", "שם פריט": "אין פריטים", "כמות": "", "יחידה": "", "מיקום במחסן": "", "מינימום מלאי": "", "הערות": "", "עודכן בתאריך": "", "מזהה פריט": "" }];
+
+        const ws = XLSX.utils.json_to_sheet(dataRows, { header: Object.keys(dataRows[0]) });
+        const sheetName = sanitizeSheetName((w.name || `מחסן_${idx + 1}`).trim() || `מחסן_${idx + 1}`);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      }
+
+      XLSX.writeFile(wb, `warehouses_items_${formatNowSuffix()}.xlsx`);
+    } catch (e) {
+      console.error("Export all warehouses items failed:", e);
+      setErr("שגיאה בייצוא תכולה של כל המחסנים");
+    }
   };
 
   return (
@@ -305,14 +358,14 @@ export default function Warehouses() {
       <div style={styles.card}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <div style={{ fontWeight: 600 }}>רשימת מחסנים</div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               type="button"
-              title="ייצא קובץ אקסל עם גיליון נפרד לכל מחסן"
+              title="ייצא קובץ אקסל: גיליון לכל מחסן עם התכולה"
               style={styles.buttonExcelAll}
-              onClick={exportAllWarehousesMultiSheets}
+              onClick={exportAllWarehousesItemsMultiSheets}
             >
-              ייצוא כל המחסנים (גיליונות)
+              ייצוא תכולת כל המחסנים (גיליונות)
             </button>
           </div>
         </div>
@@ -383,10 +436,10 @@ export default function Warehouses() {
                             <button
                               type="button"
                               style={styles.buttonExcel}
-                              title="ייצוא אקסל למחסן זה"
-                              onClick={() => exportWarehouse(w)}
+                              title="ייצא אקסל של תכולת המחסן"
+                              onClick={() => exportWarehouseItems(w)}
                             >
-                              ייצוא לאקסל
+                              ייצוא תכולה
                             </button>
                           </div>
                         )}
