@@ -220,28 +220,26 @@ export default function Warehouses() {
   };
 
   // =======================
-  // Excel Export: ITEMS per warehouse
+  // Excel Export: ITEMS per warehouse (מבוסס על /api/products?warehouse=ID)
   // =======================
 
-  // המרת אובייקט פריט לשורה באקסל (בעברית + סדר עמודות)
-  const itemToRow = (it) => {
-    // תמיכה בשמות שדות שונים — שנה כאן לפי ה־API שלך במידת הצורך
-    return {
-      "SKU": it.sku ?? it.SKU ?? "",
-      "שם פריט": it.name ?? it.itemName ?? "",
-      "כמות": it.quantity ?? it.qty ?? 0,
-      "יחידה": it.unit ?? it.uom ?? "",
-      "מיקום במחסן": it.location ?? it.bin ?? "",
-      "מינימום מלאי": it.minStock ?? it.minimum ?? "",
-      "הערות": it.notes ?? "",
-      "עודכן בתאריך": formatDate(it.updatedAt ?? it.updated_at ?? it.lastUpdated),
-      "מזהה פריט": String(it.id ?? it._id ?? ""),
-    };
-  };
+  // מיפוי אובייקט "מוצר" לשורה באקסל כתכולה
+  const itemToRow = (p) => ({
+    "SKU": p.sku ?? "",
+    "שם פריט": p.name ?? "",
+    "תיאור": p.description ?? "",
+    "כמות": Number.isFinite(Number(p.stock)) ? Number(p.stock) : "",
+    "יחידה": p.unit ?? "",            // אם אין שדה כזה אצלך — יישאר ריק
+    "מיקום במחסן": p.location ?? "",  // כנ"ל
+    "מינימום מלאי": p.minStock ?? "",
+    "עודכן בתאריך": formatDate(p.updatedAt ?? p.updated_at ?? p.lastUpdated),
+    "מזהה פריט": String(p._id ?? p.id ?? ""),
+  });
 
+  // מושך את "התכולה" של מחסן כאוסף מוצרים לפי ה-API הקיים
   const fetchItemsForWarehouse = async (wid) => {
-    // מצפה ל: GET /api/warehouses/:id/items  ->  Array<item>
-    const res = await api.get(`/api/warehouses/${wid}/items`);
+    // משתמשים ב: GET /api/products?warehouse=<wid>
+    const res = await api.get("/api/products", { params: { warehouse: wid } });
     const items = Array.isArray(res.data) ? res.data : [];
     return items;
   };
@@ -253,7 +251,7 @@ export default function Warehouses() {
 
       const dataRows = items.length
         ? items.map(itemToRow)
-        : [{ "SKU": "", "שם פריט": "אין פריטים", "כמות": "", "יחידה": "", "מיקום במחסן": "", "מינימום מלאי": "", "הערות": "", "עודכן בתאריך": "", "מזהה פריט": "" }];
+        : [{ "SKU": "", "שם פריט": "אין פריטים", "תיאור": "", "כמות": "", "יחידה": "", "מיקום במחסן": "", "מינימום מלאי": "", "עודכן בתאריך": "", "מזהה פריט": "" }];
 
       const ws = XLSX.utils.json_to_sheet(dataRows, { header: Object.keys(dataRows[0]) });
       const wb = XLSX.utils.book_new();
@@ -272,21 +270,21 @@ export default function Warehouses() {
 
       const wb = XLSX.utils.book_new();
 
-      // טוען פריטים לכל מחסן ברצף (אפשר לשפר ל־Promise.all אם ה־API והדפדפן עומדים בזה)
+      // טוען פריטים לכל מחסן ברצף (אפשר לשדרג ל-Promise.all בהמשך)
       for (let idx = 0; idx < list.length; idx++) {
         const w = list[idx];
         const wid = String(w._id || w.id);
+
         let items = [];
         try {
           items = await fetchItemsForWarehouse(wid);
-        } catch (e) {
-          // אם יש שגיאה במחסן מסוים — נייצא גיליון ריק עם שורת שגיאה
+        } catch {
           items = [];
         }
 
         const dataRows = items.length
           ? items.map(itemToRow)
-          : [{ "SKU": "", "שם פריט": "אין פריטים", "כמות": "", "יחידה": "", "מיקום במחסן": "", "מינימום מלאי": "", "הערות": "", "עודכן בתאריך": "", "מזהה פריט": "" }];
+          : [{ "SKU": "", "שם פריט": "אין פריטים", "תיאור": "", "כמות": "", "יחידה": "", "מיקום במחסן": "", "מינימום מלאי": "", "עודכן בתאריך": "", "מזהה פריט": "" }];
 
         const ws = XLSX.utils.json_to_sheet(dataRows, { header: Object.keys(dataRows[0]) });
         const sheetName = sanitizeSheetName((w.name || `מחסן_${idx + 1}`).trim() || `מחסן_${idx + 1}`);
