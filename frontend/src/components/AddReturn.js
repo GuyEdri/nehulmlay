@@ -1,6 +1,118 @@
 // frontend/src/components/AddReturn.js
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { api } from "../api";
+
+/* ======== סגנונות בסיס (כולל קומבו־בוקס) ======== */
+const styles = {
+  root: { maxWidth: 820, margin: "auto", direction: "rtl", textAlign: "right", fontFamily: "Arial, sans-serif" },
+  section: { marginBottom: 10 },
+  label: { display: "block", fontWeight: 700, marginBottom: 4 },
+  input: { width: "100%", padding: 8, textAlign: "right", boxSizing: "border-box" },
+  select: { width: "100%", padding: 8, textAlign: "right", boxSizing: "border-box", background: "#fff" },
+  row2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 },
+  itemBox: { border: "1px solid #ddd", borderRadius: 6, padding: 12, marginBottom: 10 },
+
+  // combobox
+  comboWrap: { position: "relative" },
+  comboInput: {
+    width: "100%", padding: "12px 14px", border: "1px solid #cbd5e1",
+    borderRadius: 10, outline: "none", fontSize: 15, textAlign: "right", direction: "rtl",
+  },
+  comboList: {
+    position: "absolute", insetInlineStart: 0, insetInlineEnd: 0, top: "calc(100% + 6px)",
+    background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10,
+    boxShadow: "0 8px 20px rgba(0,0,0,0.08)", zIndex: 50, maxHeight: 280, overflowY: "auto",
+  },
+  comboItem: { padding: "10px 12px", borderBottom: "1px solid #f1f5f9", cursor: "pointer" },
+  comboItemMuted: { color: "#6b7280", fontSize: 12 },
+  chipChosen: { fontSize: 12, color: "#444", marginTop: 4, textAlign: "right" },
+};
+
+/* ======== קומבו־בוקס בחירת מוצר (חיפוש + הצעות) ======== */
+function SearchableProductSelect({
+  value,              // productId (string) או "" אם לא נבחר
+  searchTerm,         // מחרוזת לחיפוש/תצוגה
+  onSearch,           // (text) => void
+  onPick,             // (productObj) => void
+  fetcher,            // async (q) => products[]
+  disabled,
+}) {
+  const [open, setOpen] = useState(false);
+  const [suggests, setSuggests] = useState([]);
+  const wrapRef = useRef(null);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    const onDocClick = (e) => {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, []);
+
+  // הבאת הצעות עם debounce
+  useEffect(() => {
+    if (disabled) return;
+    const q = (searchTerm || "").trim();
+    if (timerRef.current) clearTimeout(timerRef.current);
+
+    if (q.length < 2) {
+      setSuggests([]);
+      return;
+    }
+    timerRef.current = setTimeout(async () => {
+      try {
+        const list = await fetcher(q);
+        setSuggests(Array.isArray(list) ? list.slice(0, 30) : []);
+      } catch {
+        setSuggests([]);
+      }
+    }, 250);
+  }, [searchTerm, disabled, fetcher]);
+
+  return (
+    <div style={styles.comboWrap} ref={wrapRef} dir="rtl">
+      <input
+        style={styles.comboInput}
+        placeholder="חפש מוצר לפי שם/מקט…"
+        value={searchTerm}
+        onChange={(e) => onSearch(e.target.value)}
+        onFocus={() => !disabled && setOpen(true)}
+        disabled={disabled}
+      />
+      {open && !disabled && (
+        <div style={styles.comboList}>
+          {suggests.length === 0 ? (
+            <div style={{ ...styles.comboItem, ...styles.comboItemMuted }}>
+              {searchTerm?.trim()?.length < 2 ? "הקלד לפחות 2 תווים…" : "לא נמצאו תוצאות"}
+            </div>
+          ) : (
+            suggests.map((p) => {
+              const id = String(p._id || p.id);
+              return (
+                <div
+                  key={id}
+                  style={styles.comboItem}
+                  onClick={() => {
+                    onPick(p);
+                    setOpen(false);
+                  }}
+                >
+                  <div style={{ fontWeight: 700 }}>{p.name || "(ללא שם)"}</div>
+                  <div style={styles.comboItemMuted}>
+                    {p.sku ? `מקט: ${p.sku}` : "ללא מקט"}{p.warehouseName ? ` · מחסן: ${p.warehouseName}` : ""}
+                    {Number.isFinite(Number(p.stock)) ? ` · מלאי: ${p.stock}` : ""}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AddReturn({ onCreated, prefill }) {
   // מצב כללי/שגיאות
@@ -24,16 +136,9 @@ export default function AddReturn({ onCreated, prefill }) {
   const [notes, setNotes] = useState("");
 
   // שורות פריטים לזיכוי
+  // row: { productId, productLabel, searchTerm, quantity, manualSku, manualName }
   const [rows, setRows] = useState([
-    {
-      productId: "",
-      productLabel: "",
-      searchTerm: "",
-      suggestions: [],
-      quantity: 1,
-      manualSku: "",
-      manualName: "",
-    },
+    { productId: "", productLabel: "", searchTerm: "", quantity: 1, manualSku: "", manualName: "" },
   ]);
 
   // חתימה
@@ -56,15 +161,13 @@ export default function AddReturn({ onCreated, prefill }) {
         if (!mounted) return;
         setWarehouses(Array.isArray(whRes.data) ? whRes.data : []);
         setCustomers(Array.isArray(custRes.data) ? custRes.data : []);
-      } catch (e) {
+      } catch {
         if (!mounted) return;
         setWarehouses([]);
         setCustomers([]);
       }
     })();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
 
   // אם נבחר לקוח — נעדכן גם שם (כדי לשמור תאום בין id ↔ name)
@@ -76,14 +179,12 @@ export default function AddReturn({ onCreated, prefill }) {
 
   // --- החלת PRE-FILL אחרי שהנתונים נטענו (חד-פעמי) ---
   useEffect(() => {
-    if (prefillAppliedRef.current) return; // כבר הוחל
-    if (!prefill) return;                  // אין מה להחיל
-    // ננסה להחיל רק אחרי שיש לנו את רשימות המחסנים/לקוחות (כדי שערכי select יהיו קיימים)
+    if (prefillAppliedRef.current) return;
+    if (!prefill) return;
     const warehousesReady = Array.isArray(warehouses);
     const customersReady = Array.isArray(customers);
     if (!warehousesReady || !customersReady) return;
 
-    // החלת שדות עליונים
     if (prefill.warehouseId !== undefined) setWarehouseId(String(prefill.warehouseId || ""));
     if (prefill.customerId !== undefined) setCustomerId(String(prefill.customerId || ""));
     if (prefill.customerName !== undefined) setCustomerName(String(prefill.customerName || ""));
@@ -92,14 +193,12 @@ export default function AddReturn({ onCreated, prefill }) {
     if (prefill.personalNumber !== undefined) setPersonalNumber(String(prefill.personalNumber || ""));
     if (prefill.notes !== undefined) setNotes(String(prefill.notes || ""));
 
-    // שורות פריטים (אם נשלחו)
     if (Array.isArray(prefill.rows) && prefill.rows.length > 0) {
       setRows(
         prefill.rows.map((r) => ({
           productId: String(r.productId || ""),
           productLabel: String(r.productLabel || ""),
           searchTerm: String(r.searchTerm || r.productLabel || ""),
-          suggestions: [],
           quantity: Number(r.quantity || 1),
           manualSku: String(r.manualSku || ""),
           manualName: String(r.manualName || ""),
@@ -110,60 +209,22 @@ export default function AddReturn({ onCreated, prefill }) {
     prefillAppliedRef.current = true;
   }, [prefill, warehouses, customers]);
 
-  // --- חיפוש מוצרים עם debounce קצר ---
-  const timers = useRef({}); // { idx: timeoutId }
+  /* ======== חיפוש מוצרים ל־קומבו־בוקס (מביא מהשרת) ======== */
+  const fetchProducts = useMemo(() => {
+    return async (q) => {
+      const res = await api.get(`/api/products?search=${encodeURIComponent(q)}`);
+      return Array.isArray(res.data) ? res.data : [];
+    };
+  }, []);
 
-  const searchProducts = async (idx, term) => {
-    try {
-      const res = await api.get(`/api/products?search=${encodeURIComponent(term)}`);
-      const list = Array.isArray(res.data) ? res.data : [];
-      setRows((prev) => {
-        const next = [...prev];
-        next[idx].suggestions = list;
-        return next;
-      });
-    } catch {
-      setRows((prev) => {
-        const next = [...prev];
-        next[idx].suggestions = [];
-        return next;
-      });
-    }
-  };
+  /* ======== פעולות על שורות ======== */
+  const addRow = () =>
+    setRows((prev) => [...prev, { productId: "", productLabel: "", searchTerm: "", quantity: 1, manualSku: "", manualName: "" }]);
 
-  const onPickSuggestion = (idx, product) => {
-    setRows((prev) => {
-      const next = [...prev];
-      next[idx].productId = String(product._id || product.id);
-      next[idx].productLabel = `${product.name || ""} (${product.sku || ""})`;
-      next[idx].searchTerm = next[idx].productLabel;
-      next[idx].suggestions = [];
-      next[idx].manualSku = "";
-      next[idx].manualName = "";
-      return next;
-    });
-  };
-
-  const addRow = () => {
-    setRows((prev) => [
-      ...prev,
-      {
-        productId: "",
-        productLabel: "",
-        searchTerm: "",
-        suggestions: [],
-        quantity: 1,
-        manualSku: "",
-        manualName: "",
-      },
-    ]);
-  };
-
-  const removeRow = (idx) => {
+  const removeRow = (idx) =>
     setRows((prev) => prev.filter((_, i) => i !== idx));
-  };
 
-  // --- חתימה על קנבס ---
+  /* ======== חתימה על קנבס ======== */
   const getPos = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -191,42 +252,30 @@ export default function AddReturn({ onCreated, prefill }) {
   };
   const endDraw = () => {
     drawing.current = false;
-    if (canvasRef.current) {
-      setSignature(canvasRef.current.toDataURL("image/png"));
-    }
+    if (canvasRef.current) setSignature(canvasRef.current.toDataURL("image/png"));
   };
   const clearSignature = () => {
-    const c = canvasRef.current;
-    if (!c) return;
+    const c = canvasRef.current; if (!c) return;
     const ctx = c.getContext("2d");
     ctx.clearRect(0, 0, c.width, c.height);
     setSignature("");
   };
 
-  // --- שליחה ---
+  /* ======== שליחה ======== */
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg("");
     setSuccessMsg("");
 
-    // ולידציות בסיסיות
-    if (!customerId || !customerName) {
-      return setErrorMsg("יש לבחור לקוח");
-    }
-    if (!returnedBy.trim()) {
-      return setErrorMsg("יש למלא 'הוחזר ע\"י'");
-    }
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return setErrorMsg("יש להוסיף לפחות פריט אחד");
-    }
+    if (!customerId || !customerName) return setErrorMsg("יש לבחור לקוח");
+    if (!returnedBy.trim()) return setErrorMsg("יש למלא 'הוחזר ע\"י'");
+    if (!Array.isArray(rows) || rows.length === 0) return setErrorMsg("יש להוסיף לפחות פריט אחד");
 
-    // לבנות items לשרת:
     const itemsToSend = [];
     for (const r of rows) {
       const qty = Number(r.quantity);
-      if (!Number.isFinite(qty) || qty < 1) {
-        return setErrorMsg("כמות חייבת להיות מספר חיובי בכל פריט");
-      }
+      if (!Number.isFinite(qty) || qty < 1) return setErrorMsg("כמות חייבת להיות מספר חיובי בכל פריט");
+
       if (r.productId) {
         itemsToSend.push({ product: String(r.productId), quantity: qty });
       } else if ((r.manualSku || "").trim()) {
@@ -240,7 +289,6 @@ export default function AddReturn({ onCreated, prefill }) {
       }
     }
 
-    // אם יש פריט ידני — מומלץ לבחור מחסן יעד
     const hasManual = itemsToSend.some((it) => it.sku && !it.product);
     if (hasManual && !String(warehouseId || "").trim()) {
       return setErrorMsg("יש לבחור מחסן יעד עבור פריטים ידניים (SKU)");
@@ -272,17 +320,7 @@ export default function AddReturn({ onCreated, prefill }) {
       setPersonalNumber("");
       setNotes("");
       setDate(new Date().toISOString().slice(0, 16));
-      setRows([
-        {
-          productId: "",
-          productLabel: "",
-          searchTerm: "",
-          suggestions: [],
-          quantity: 1,
-          manualSku: "",
-          manualName: "",
-        },
-      ]);
+      setRows([{ productId: "", productLabel: "", searchTerm: "", quantity: 1, manualSku: "", manualName: "" }]);
       clearSignature();
 
       if (onCreated) onCreated(res.data);
@@ -294,32 +332,34 @@ export default function AddReturn({ onCreated, prefill }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} style={{ maxWidth: 820, margin: "auto", direction: "rtl", textAlign: "right", fontFamily: "Arial, sans-serif" }}>
+    <form onSubmit={handleSubmit} style={styles.root}>
       <h2 style={{ textAlign: "center" }}>זיכוי מלאי</h2>
 
       {/* מחסן יעד */}
-      <label>מחסן יעד</label>
-      <select
-        value={warehouseId}
-        onChange={(e) => setWarehouseId(e.target.value)}
-        style={{ width: "100%", padding: 8, marginBottom: 10, textAlign: "right" }}
-      >
-        <option value="">בחר… (רשות; חובה לפריטים ידניים)</option>
-        {warehouses.map((w) => (
-          <option key={w.id || w._id} value={String(w.id || w._id)}>
-            {w.name || "(ללא שם)"}{w.address ? ` — ${w.address}` : ""}
-          </option>
-        ))}
-      </select>
+      <div style={styles.section}>
+        <label style={styles.label}>מחסן יעד</label>
+        <select
+          value={warehouseId}
+          onChange={(e) => setWarehouseId(e.target.value)}
+          style={styles.select}
+        >
+          <option value="">בחר… (רשות; חובה לפריטים ידניים)</option>
+          {warehouses.map((w) => (
+            <option key={w.id || w._id} value={String(w.id || w._id)}>
+              {w.name || "(ללא שם)"}{w.address ? ` — ${w.address}` : ""}
+            </option>
+          ))}
+        </select>
+      </div>
 
-      {/* לקוח + מי החזיר + תאריך */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+      {/* לקוח + מי החזיר + תאריך + מס' אישי */}
+      <div style={{ ...styles.section, ...styles.row2 }}>
         <div>
-          <label>לקוח</label>
+          <label style={styles.label}>לקוח</label>
           <select
             value={customerId}
             onChange={(e) => setCustomerId(e.target.value)}
-            style={{ width: "100%", padding: 8, marginBottom: 10, textAlign: "right" }}
+            style={styles.select}
             required
           >
             <option value="">בחר לקוח…</option>
@@ -332,132 +372,125 @@ export default function AddReturn({ onCreated, prefill }) {
         </div>
 
         <div>
-          <label>הוחזר ע״י</label>
+          <label style={styles.label}>הוחזר ע״י</label>
           <input
             value={returnedBy}
             onChange={(e) => setReturnedBy(e.target.value)}
             placeholder="שם המוסר"
-            style={{ width: "100%", padding: 8, marginBottom: 10, textAlign: "right" }}
+            style={styles.input}
             required
           />
         </div>
 
         <div>
-          <label>תאריך ושעה</label>
+          <label style={styles.label}>תאריך ושעה</label>
           <input
             type="datetime-local"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            style={{ width: "100%", padding: 8, marginBottom: 10, textAlign: "right" }}
+            style={styles.input}
           />
         </div>
 
         <div>
-          <label>מספר אישי (רשות)</label>
+          <label style={styles.label}>מספר אישי (רשות)</label>
           <input
             value={personalNumber}
             onChange={(e) => setPersonalNumber(e.target.value)}
-            style={{ width: "100%", padding: 8, marginBottom: 10, textAlign: "right" }}
+            style={styles.input}
           />
         </div>
       </div>
 
       {/* הערות */}
-      <label>הערות (רשות)</label>
-      <input
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        placeholder="הערה פנימית/הקשר"
-        style={{ width: "100%", padding: 8, marginBottom: 10, textAlign: "right" }}
-      />
+      <div style={styles.section}>
+        <label style={styles.label}>הערות (רשות)</label>
+        <input
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="הערה פנימית/הקשר"
+          style={styles.input}
+        />
+      </div>
 
       {/* פריטים */}
       <h3 style={{ marginTop: 12 }}>פריטים לזיכוי</h3>
       {rows.map((row, idx) => (
-        <div key={idx} style={{ border: "1px solid #ddd", borderRadius: 6, padding: 12, marginBottom: 10 }}>
+        <div key={idx} style={styles.itemBox}>
           <div style={{ display: "grid", gridTemplateColumns: "3fr 1fr auto", gap: 8, alignItems: "start" }}>
-            {/* חיפוש מוצר */}
+            {/* קומבו־בוקס חיפוש/בחירה */}
             <div>
-              <input
-                placeholder="חפש מוצר לפי שם/מקט… (או מלא ידנית למטה)"
-                value={row.searchTerm}
-                onChange={(e) => {
-                  const val = e.target.value;
+              <label style={styles.label}>בחר/חפש מוצר</label>
+              <SearchableProductSelect
+                value={row.productId}
+                searchTerm={row.searchTerm}
+                onSearch={(txt) =>
                   setRows((prev) => {
                     const next = [...prev];
-                    next[idx].searchTerm = val;
-                    if (val !== next[idx].productLabel) {
+                    next[idx].searchTerm = txt;
+                    if (txt !== next[idx].productLabel) {
                       next[idx].productId = "";
                       next[idx].productLabel = "";
                     }
                     return next;
-                  });
-
-                  if ((val || "").trim().length >= 2) {
-                    if (timers.current[idx]) clearTimeout(timers.current[idx]);
-                    timers.current[idx] = setTimeout(() => searchProducts(idx, val.trim()), 250);
-                  } else {
-                    setRows((prev) => {
-                      const next = [...prev];
-                      next[idx].suggestions = [];
-                      return next;
-                    });
-                  }
-                }}
-                style={{ width: "100%", padding: 8, marginBottom: 6, textAlign: "right" }}
+                  })
+                }
+                onPick={(p) =>
+                  setRows((prev) => {
+                    const next = [...prev];
+                    const id = String(p._id || p.id);
+                    const label = `${p.name || ""}${p.sku ? ` (${p.sku})` : ""}`;
+                    next[idx].productId = id;
+                    next[idx].productLabel = label;
+                    next[idx].searchTerm = label;
+                    // ניקוי שדות ידניים אם נבחר מוצר מקטלוג
+                    next[idx].manualSku = "";
+                    next[idx].manualName = "";
+                    return next;
+                  })
+                }
+                fetcher={fetchProducts}
+                disabled={false}
               />
 
-              {/* הצעות */}
-              {row.suggestions.length > 0 && (
-                <div style={{ border: "1px solid #ccc", borderRadius: 4, maxHeight: 160, overflowY: "auto" }}>
-                  {row.suggestions.map((p) => (
-                    <div
-                      key={p._id || p.id}
-                      onClick={() => onPickSuggestion(idx, p)}
-                      style={{ padding: "6px 8px", cursor: "pointer", textAlign: "right" }}
-                    >
-                      <div style={{ fontWeight: 600 }}>{p.name || "(ללא שם)"}</div>
-                      <div style={{ fontFamily: "monospace", fontSize: 12, opacity: 0.8 }}>
-                        {p.sku} {p.warehouseName ? `• מחסן: ${p.warehouseName}` : ""}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* כניסה ידנית (אם אין productId) */}
+              {/* אם לא נבחר מוצר – מאפשרים הזנה ידנית */}
               {!row.productId && (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
-                  <input
-                    placeholder="SKU (חובה לפריט ידני)"
-                    value={row.manualSku}
-                    onChange={(e) =>
-                      setRows((prev) => {
-                        const next = [...prev];
-                        next[idx].manualSku = e.target.value.toUpperCase();
-                        return next;
-                      })
-                    }
-                    style={{ width: "100%", padding: 8, textAlign: "right", fontFamily: "monospace", letterSpacing: 1 }}
-                  />
-                  <input
-                    placeholder="שם מוצר (רשות)"
-                    value={row.manualName}
-                    onChange={(e) =>
-                      setRows((prev) => {
-                        const next = [...prev];
-                        next[idx].manualName = e.target.value;
-                        return next;
-                      })
-                    }
-                    style={{ width: "100%", padding: 8, textAlign: "right" }}
-                  />
+                  <div>
+                    <label style={styles.label}>SKU (חובה לפריט ידני)</label>
+                    <input
+                      placeholder="למשל: ABC-123"
+                      value={row.manualSku}
+                      onChange={(e) =>
+                        setRows((prev) => {
+                          const next = [...prev];
+                          next[idx].manualSku = e.target.value.toUpperCase();
+                          return next;
+                        })
+                      }
+                      style={{ ...styles.input, fontFamily: "monospace", letterSpacing: 1 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={styles.label}>שם מוצר (רשות)</label>
+                    <input
+                      value={row.manualName}
+                      onChange={(e) =>
+                        setRows((prev) => {
+                          const next = [...prev];
+                          next[idx].manualName = e.target.value;
+                          return next;
+                        })
+                      }
+                      style={styles.input}
+                    />
+                  </div>
                 </div>
               )}
 
               {/* תצוגה כאשר נבחר מוצר */}
               {row.productId && (
-                <div style={{ fontSize: 12, color: "#444", marginTop: 4, textAlign: "right" }}>
+                <div style={styles.chipChosen}>
                   נבחר: {row.productLabel}
                 </div>
               )}
@@ -465,6 +498,7 @@ export default function AddReturn({ onCreated, prefill }) {
 
             {/* כמות */}
             <div>
+              <label style={styles.label}>כמות</label>
               <input
                 type="number"
                 min={1}
@@ -477,13 +511,13 @@ export default function AddReturn({ onCreated, prefill }) {
                     return next;
                   })
                 }
-                style={{ width: "100%", padding: 8, textAlign: "right" }}
+                style={styles.input}
               />
             </div>
 
             {/* הסרה */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button type="button" onClick={() => removeRow(idx)} style={{ padding: "6px 10px" }}>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+              <button type="button" onClick={() => removeRow(idx)} style={{ padding: "8px 12px" }}>
                 הסר
               </button>
             </div>
@@ -505,12 +539,12 @@ export default function AddReturn({ onCreated, prefill }) {
           width={760}
           height={160}
           style={{ width: "100%", background: "#fff", cursor: "crosshair", touchAction: "none" }}
-          onMouseDown={startDraw}
-          onMouseMove={moveDraw}
+          onMouseDown={(e) => { startDraw(e); }}
+          onMouseMove={(e) => { moveDraw(e); }}
           onMouseUp={endDraw}
           onMouseLeave={endDraw}
-          onTouchStart={startDraw}
-          onTouchMove={moveDraw}
+          onTouchStart={(e) => { startDraw(e); }}
+          onTouchMove={(e) => { moveDraw(e); }}
           onTouchEnd={endDraw}
         />
         <div style={{ display: "flex", gap: 8, marginTop: 8, justifyContent: "flex-end" }}>
