@@ -38,9 +38,34 @@ const formatDate = (date) => {
   });
 };
 
-// טבלת פריטים קטנה (RTL)
-function ItemsMiniTable({ items, getName, getSku }) {
-  if (!Array.isArray(items) || items.length === 0) return <div className="dl-empty">—</div>;
+/* ---------------------------
+ * טבלת פריטים קטנה (RTL)
+ * מציגה גם פריטי קטלוג וגם פריטים ידניים
+ * --------------------------- */
+function ItemsMiniTable({ catalogItems, manualItems, getName, getSku }) {
+  const rows = [];
+
+  if (Array.isArray(catalogItems)) {
+    for (const it of catalogItems) {
+      rows.push({
+        sku: getSku(it.product) || "—",
+        name: getName(it.product),
+        quantity: Number(it.quantity || 0),
+      });
+    }
+  }
+  if (Array.isArray(manualItems)) {
+    for (const mi of manualItems) {
+      rows.push({
+        sku: mi.sku || "",
+        name: mi.name || "פריט ידני",
+        quantity: Number(mi.quantity || 0),
+      });
+    }
+  }
+
+  if (rows.length === 0) return <div className="dl-empty">—</div>;
+
   return (
     <table className="dl-items-table" dir="rtl">
       <thead>
@@ -51,11 +76,11 @@ function ItemsMiniTable({ items, getName, getSku }) {
         </tr>
       </thead>
       <tbody>
-        {items.map((it, i) => (
+        {rows.map((r, i) => (
           <tr key={i}>
-            <td>{getSku(it.product) || "—"}</td>
-            <td>{getName(it.product)}</td>
-            <td>{it.quantity}</td>
+            <td>{r.sku || "—"}</td>
+            <td>{r.name}</td>
+            <td>{r.quantity}</td>
           </tr>
         ))}
       </tbody>
@@ -91,7 +116,7 @@ export default function DeliveriesList() {
   // מפה מהירה של מוצרים
   const productMap = useMemo(() => {
     const m = new Map();
-    products.forEach((p) => {
+    (products || []).forEach((p) => {
       const id = String(p._id || p.id);
       m.set(id, {
         name: p.name || "",
@@ -103,12 +128,12 @@ export default function DeliveriesList() {
   }, [products]);
 
   const getProductName = (id) => productMap.get(String(id))?.name || String(id);
-  const getProductSku = (id) => productMap.get(String(id))?.sku || "";
-  const getProductWh = (id) => productMap.get(String(id))?.warehouseId || "";
+  const getProductSku  = (id) => productMap.get(String(id))?.sku  || "";
+  const getProductWh   = (id) => productMap.get(String(id))?.warehouseId || "";
 
   // לקוחות לבחירה
   const customerOptions = useMemo(
-    () => _.uniq(deliveries.map((d) => d.customerName).filter(Boolean)).sort(),
+    () => _.uniq((deliveries || []).map((d) => d.customerName).filter(Boolean)).sort(),
     [deliveries]
   );
 
@@ -148,15 +173,13 @@ export default function DeliveriesList() {
 
   // לחיצה על "זיכוי" — בונים prefill ל־AddReturn
   const handleCredit = (delivery) => {
-    // נעדיף להחזיר למחסן המקורי של הניפוק
+    // נחזיר למחסן המקורי (אם יש)
     const warehouseId = String(delivery.warehouseId || "");
-    // "הוחזר ע"י" יהיה מי שנופק לו
     const returnedBy = String(delivery.deliveredTo || "");
-    // אם יש מזהה לקוח, נעביר אותו + השם
     const customerId = String(delivery.customer || "");
     const customerName = String(delivery.customerName || "");
 
-    // פריטים מראש עם productId וכמות; נוסיף גם תווית לתצוגה (שם + מק"ט)
+    // פריטי זיכוי רק עבור פריטי קטלוג (פריטים ידניים לא משנים מלאי)
     const rows = (delivery.items || []).map((it) => {
       const pid = String(it.product || "");
       const name = getProductName(pid);
@@ -177,7 +200,7 @@ export default function DeliveriesList() {
       customerId,
       customerName,
       returnedBy,
-      date: new Date().toISOString().slice(0, 16), // עכשיו
+      date: new Date().toISOString().slice(0, 16),
       personalNumber: "",
       notes: `זיכוי אוטומטי מניפוק ${delivery._id || delivery.id || ""}`,
       rows,
@@ -185,21 +208,33 @@ export default function DeliveriesList() {
     setShowReturnModal(true);
   };
 
-  // ייצוא אקסל
+  // ייצוא אקסל (כולל פריטים ידניים)
   const exportToExcel = () => {
     const rows = [];
     grouped.forEach((group) => {
       group.deliveries.forEach((d) => {
-        const itemSKUs = d.items?.map((it) => getProductSku(it.product) || "—").join(", ") || "";
-        const itemNames = d.items?.map((it) => getProductName(it.product)).join(", ") || "";
-        const itemQtys = d.items?.map((it) => it.quantity).join(", ") || "";
+        const allSKUs = [
+          ...(d.items || []).map((it) => getProductSku(it.product) || "—"),
+          ...(d.manualItems || []).map((mi) => mi.sku || ""),
+        ].filter((x) => x !== undefined);
+
+        const allNames = [
+          ...(d.items || []).map((it) => getProductName(it.product)),
+          ...(d.manualItems || []).map((mi) => mi.name || "פריט ידני"),
+        ];
+
+        const allQtys = [
+          ...(d.items || []).map((it) => Number(it.quantity || 0)),
+          ...(d.manualItems || []).map((mi) => Number(mi.quantity || 0)),
+        ];
+
         rows.push({
           "לקוח": group.customerName,
           "תאריך": formatDate(d.date),
           "למי נופק": d.deliveredTo || "",
-          "מקטים": itemSKUs,
-          "מוצרים": itemNames,
-          "כמויות": itemQtys,
+          "מקטים": allSKUs.join(", "),
+          "מוצרים": allNames.join(", "),
+          "כמויות": allQtys.join(", "),
           "חתימה": d.signature ? "כן" : "לא",
         });
       });
@@ -241,9 +276,15 @@ export default function DeliveriesList() {
             <div key={delivery._id || delivery.id || idx} className="dl-card">
               <div className="dl-card-row"><span>תאריך:</span> {formatDate(delivery.date)}</div>
               <div className="dl-card-row"><span>למי נופק:</span> {delivery.deliveredTo || "—"}</div>
+
               <div className="dl-card-row">
                 <span>פריטים:</span>
-                <ItemsMiniTable items={delivery.items} getName={getProductName} getSku={getProductSku} />
+                <ItemsMiniTable
+                  catalogItems={delivery.items}
+                  manualItems={delivery.manualItems}
+                  getName={getProductName}
+                  getSku={getProductSku}
+                />
               </div>
 
               <div className="dl-card-actions">
@@ -276,7 +317,6 @@ export default function DeliveriesList() {
             </div>
 
             <div className="modal-body">
-              {/* מעבירים ל-AddReturn את ה-prefill */}
               <AddReturn
                 onCreated={() => setShowReturnModal(false)}
                 prefill={prefillForReturn}
