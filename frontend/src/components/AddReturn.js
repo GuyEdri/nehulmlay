@@ -34,7 +34,8 @@ function SearchableProductSelect({
   searchTerm,         // מחרוזת לחיפוש/תצוגה
   onSearch,           // (text) => void
   onPick,             // (productObj) => void
-  fetcher,            // async (q) => products[]
+  fetcher,            // async (q) => products[]  — חיפוש לפי טקסט
+  initialSuggestions, // Array — כל המוצרים להצגה כשאין חיפוש
   disabled,
 }) {
   const [open, setOpen] = useState(false);
@@ -51,31 +52,37 @@ function SearchableProductSelect({
     return () => document.removeEventListener("click", onDocClick);
   }, []);
 
-  // הבאת הצעות עם debounce
+  // הבאת הצעות עם debounce (רק כשיש חיפוש)
   useEffect(() => {
     if (disabled) return;
     const q = (searchTerm || "").trim();
     if (timerRef.current) clearTimeout(timerRef.current);
 
     if (q.length < 2) {
-      setSuggests([]);
+      setSuggests([]); // מתאפס; יציג initialSuggestions
       return;
     }
     timerRef.current = setTimeout(async () => {
       try {
         const list = await fetcher(q);
-        setSuggests(Array.isArray(list) ? list.slice(0, 30) : []);
+        setSuggests(Array.isArray(list) ? list.slice(0, 50) : []); // עד 50 תוצאות
       } catch {
         setSuggests([]);
       }
     }, 250);
   }, [searchTerm, disabled, fetcher]);
 
+  // האם להציג את רשימת ברירת המחדל (כל המוצרים)
+  const shouldShowInitial = open && !disabled && (searchTerm.trim().length < 2);
+
+  // רשימה סופית להצגה
+  const listToShow = shouldShowInitial ? (initialSuggestions || []) : suggests;
+
   return (
     <div style={styles.comboWrap} ref={wrapRef} dir="rtl">
       <input
         style={styles.comboInput}
-        placeholder="חפש מוצר לפי שם/מקט…"
+        placeholder="חפש מוצר לפי שם/מקט… (או בחר מרשימה)"
         value={searchTerm}
         onChange={(e) => onSearch(e.target.value)}
         onFocus={() => !disabled && setOpen(true)}
@@ -83,12 +90,12 @@ function SearchableProductSelect({
       />
       {open && !disabled && (
         <div style={styles.comboList}>
-          {suggests.length === 0 ? (
+          {listToShow.length === 0 ? (
             <div style={{ ...styles.comboItem, ...styles.comboItemMuted }}>
-              {searchTerm?.trim()?.length < 2 ? "הקלד לפחות 2 תווים…" : "לא נמצאו תוצאות"}
+              {shouldShowInitial ? "אין מוצרים להצגה" : (searchTerm?.trim()?.length < 2 ? "הקלד לפחות 2 תווים…" : "לא נמצאו תוצאות")}
             </div>
           ) : (
-            suggests.map((p) => {
+            listToShow.map((p) => {
               const id = String(p._id || p.id);
               return (
                 <div
@@ -149,22 +156,28 @@ export default function AddReturn({ onCreated, prefill }) {
   // האם הוחל prefill כבר
   const prefillAppliedRef = useRef(false);
 
-  // --- טעינת מחסנים/לקוחות ---
+  // מוצרים להצגה כשאין חיפוש (כל המוצרים)
+  const [allProducts, setAllProducts] = useState([]);
+
+  // --- טעינת מחסנים/לקוחות + כל המוצרים ---
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const [whRes, custRes] = await Promise.all([
+        const [whRes, custRes, productsRes] = await Promise.all([
           api.get("/api/warehouses"),
           api.get("/api/customers"),
+          api.get("/api/products"), // 👈 מביא את כל המוצרים להצגה מיידית
         ]);
         if (!mounted) return;
         setWarehouses(Array.isArray(whRes.data) ? whRes.data : []);
         setCustomers(Array.isArray(custRes.data) ? custRes.data : []);
+        setAllProducts(Array.isArray(productsRes.data) ? productsRes.data : []);
       } catch {
         if (!mounted) return;
         setWarehouses([]);
         setCustomers([]);
+        setAllProducts([]);
       }
     })();
     return () => { mounted = false; };
@@ -181,9 +194,11 @@ export default function AddReturn({ onCreated, prefill }) {
   useEffect(() => {
     if (prefillAppliedRef.current) return;
     if (!prefill) return;
+
     const warehousesReady = Array.isArray(warehouses);
     const customersReady = Array.isArray(customers);
-    if (!warehousesReady || !customersReady) return;
+    const productsReady = Array.isArray(allProducts); // לא חובה, אבל נחכה כדי שלא יהיו הבהובים
+    if (!warehousesReady || !customersReady || !productsReady) return;
 
     if (prefill.warehouseId !== undefined) setWarehouseId(String(prefill.warehouseId || ""));
     if (prefill.customerId !== undefined) setCustomerId(String(prefill.customerId || ""));
@@ -207,7 +222,7 @@ export default function AddReturn({ onCreated, prefill }) {
     }
 
     prefillAppliedRef.current = true;
-  }, [prefill, warehouses, customers]);
+  }, [prefill, warehouses, customers, allProducts]);
 
   /* ======== חיפוש מוצרים ל־קומבו־בוקס (מביא מהשרת) ======== */
   const fetchProducts = useMemo(() => {
@@ -450,6 +465,7 @@ export default function AddReturn({ onCreated, prefill }) {
                   })
                 }
                 fetcher={fetchProducts}
+                initialSuggestions={allProducts}  // 👈 מציג את כל המוצרים אם לא הוקלד חיפוש
                 disabled={false}
               />
 
