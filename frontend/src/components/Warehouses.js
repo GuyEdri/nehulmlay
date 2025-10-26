@@ -1,6 +1,7 @@
 // frontend/src/components/Warehouses.js
 import React, { useEffect, useState } from "react";
 import { api } from "../api";
+import * as XLSX from "xlsx";
 
 const styles = {
   container: {
@@ -54,6 +55,14 @@ const styles = {
     appearance: "none", border: "none", background: "#eab308", color: "#111827",
     padding: "12px 16px", borderRadius: 10, fontWeight: 700, cursor: "pointer",
   },
+  buttonExcel: {
+    appearance: "none", border: "none", background: "#22c55e", color: "#fff",
+    padding: "10px 14px", borderRadius: 10, fontWeight: 700, cursor: "pointer",
+  },
+  buttonExcelAll: {
+    appearance: "none", border: "none", background: "#10b981", color: "#fff",
+    padding: "10px 14px", borderRadius: 10, fontWeight: 700, cursor: "pointer",
+  },
 
   // alerts
   alertError: { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca", borderRadius: 8, padding: "10px 12px" },
@@ -94,6 +103,19 @@ const mobileCss = `
   .subtitle { font-size: 16px !important; }
 }
 `;
+
+function sanitizeSheetName(name) {
+  if (!name) return "Sheet";
+  // גליון אקסל: איסור על: : \ / ? * [ ] ו-אורך עד 31
+  const cleaned = String(name).replace(/[:\\/?*\[\]]/g, "_");
+  return cleaned.length > 31 ? cleaned.slice(0, 31) : cleaned;
+}
+
+function formatNowSuffix() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
 
 export default function Warehouses() {
   const [list, setList] = useState([]);
@@ -189,6 +211,42 @@ export default function Warehouses() {
     }
   };
 
+  // =======================
+  // Excel Export Helpers
+  // =======================
+  const whToRows = (w) => {
+    const id = String(w._id || w.id || "");
+    return [
+      { שדה: "מזהה", ערך: id },
+      { שדה: "שם", ערך: w.name || "" },
+      { שדה: "כתובת", ערך: w.address || "" },
+      { שדה: "הערות", ערך: w.notes || "" },
+    ];
+  };
+
+  const exportWarehouse = (w) => {
+    // גיליון אחד עם פרטי המחסן
+    const ws = XLSX.utils.json_to_sheet(whToRows(w));
+    // יצירה + כתיבה
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, sanitizeSheetName(w.name || "מחסן"));
+    XLSX.writeFile(wb, `warehouse_${(w.name || "unnamed").trim() || "unnamed"}_${formatNowSuffix()}.xlsx`);
+  };
+
+  const exportAllWarehousesMultiSheets = () => {
+    if (!Array.isArray(list) || list.length === 0) return;
+
+    const wb = XLSX.utils.book_new();
+
+    list.forEach((w, idx) => {
+      const ws = XLSX.utils.json_to_sheet(whToRows(w));
+      const nameRaw = (w.name || `מחסן_${idx + 1}`).trim();
+      XLSX.utils.book_append_sheet(wb, ws, sanitizeSheetName(nameRaw || `מחסן_${idx + 1}`));
+    });
+
+    XLSX.writeFile(wb, `warehouses_${formatNowSuffix()}.xlsx`);
+  };
+
   return (
     <div style={styles.container}>
       {/* CSS רספונסיבי למובייל */}
@@ -243,9 +301,22 @@ export default function Warehouses() {
         </form>
       </div>
 
-      {/* רשימת מחסנים + עריכה */}
+      {/* רשימת מחסנים + ייצוא */}
       <div style={styles.card}>
-        <div style={{ marginBottom: 8, fontWeight: 600 }}>רשימת מחסנים</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div style={{ fontWeight: 600 }}>רשימת מחסנים</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              type="button"
+              title="ייצא קובץ אקסל עם גיליון נפרד לכל מחסן"
+              style={styles.buttonExcelAll}
+              onClick={exportAllWarehousesMultiSheets}
+            >
+              ייצוא כל המחסנים (גיליונות)
+            </button>
+          </div>
+        </div>
+
         {loading ? (
           <div style={{ color: "#6b7280", textAlign: "center", padding: 24 }}>טוען…</div>
         ) : list.length === 0 ? (
@@ -302,12 +373,22 @@ export default function Warehouses() {
                       </td>
                       <td style={styles.actionsCell} className="actions" data-label="פעולות">
                         {isEditing ? (
-                          <div style={{ display: "flex", gap: 8, justifyContent: "flex-start" }}>
+                          <div style={{ display: "flex", gap: 8, justifyContent: "flex-start", flexWrap: "wrap" }}>
                             <button type="button" style={styles.buttonSuccess} onClick={saveEdit}>שמור</button>
                             <button type="button" style={styles.buttonGhost} onClick={cancelEdit}>ביטול</button>
                           </div>
                         ) : (
-                          <button type="button" style={styles.buttonWarn} onClick={() => startEdit(w)}>ערוך</button>
+                          <div style={{ display: "flex", gap: 8, justifyContent: "flex-start", flexWrap: "wrap" }}>
+                            <button type="button" style={styles.buttonWarn} onClick={() => startEdit(w)}>ערוך</button>
+                            <button
+                              type="button"
+                              style={styles.buttonExcel}
+                              title="ייצוא אקסל למחסן זה"
+                              onClick={() => exportWarehouse(w)}
+                            >
+                              ייצוא לאקסל
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
