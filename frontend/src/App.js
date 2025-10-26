@@ -7,6 +7,7 @@ import DeliveriesList from "./components/DeliveriesList";
 import Warehouses from "./components/Warehouses";
 import AddReturn from "./components/AddReturn";
 import ReturnsList from "./components/ReturnsList";
+import Footer from "./components/Footer"; // 👈 פוטר קבוע
 
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import Login from "./components/Login";
@@ -16,7 +17,7 @@ function AppContent() {
   const [screen, setScreen] = useState("products");
   const { user, initializing, logout } = useAuth();
 
-  // מצב תפריט מובייל
+  // מצב תפריט מובייל (מודאל)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const NAV = [
@@ -190,7 +191,24 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      {/* מעטפת כללית כדי שהפוטר ידבק לתחתית גם בעמודים קצרים */}
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          background: "#f8fafc",
+        }}
+        dir="rtl"
+      >
+        {/* גוף האפליקציה */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+          <AppContent />
+        </div>
+
+        {/* פוטר קבוע לכל העמודים */}
+        <Footer />
+      </div>
     </AuthProvider>
   );
 }
