@@ -106,6 +106,7 @@ const mobileCss = `
 
 function sanitizeSheetName(name) {
   if (!name) return "Sheet";
+  // גליון אקסל: איסור על: : \ / ? * [ ] ו-אורך עד 31
   const cleaned = String(name).replace(/[:\\/?*\[\]]/g, "_");
   return cleaned.length > 31 ? cleaned.slice(0, 31) : cleaned;
 }
@@ -223,7 +224,7 @@ export default function Warehouses() {
   // Excel Export: ITEMS per warehouse (מבוסס על /api/products?warehouse=ID)
   // =======================
 
-  // מיפוי אובייקט "מוצר" לשורה באקסל כתכולה
+  // המרת אובייקט "מוצר" לשורה באקסל כתכולה — בלי מזהה, עם שם פריט
   const itemToRow = (p) => ({
     "SKU": p.sku ?? "",
     "שם פריט": p.name ?? "",
@@ -233,7 +234,6 @@ export default function Warehouses() {
     "מיקום במחסן": p.location ?? "",  // כנ"ל
     "מינימום מלאי": p.minStock ?? "",
     "עודכן בתאריך": formatDate(p.updatedAt ?? p.updated_at ?? p.lastUpdated),
-    "מזהה פריט": String(p._id ?? p.id ?? ""),
   });
 
   // מושך את "התכולה" של מחסן כאוסף מוצרים לפי ה-API הקיים
@@ -251,7 +251,7 @@ export default function Warehouses() {
 
       const dataRows = items.length
         ? items.map(itemToRow)
-        : [{ "SKU": "", "שם פריט": "אין פריטים", "תיאור": "", "כמות": "", "יחידה": "", "מיקום במחסן": "", "מינימום מלאי": "", "עודכן בתאריך": "", "מזהה פריט": "" }];
+        : [{ "SKU": "", "שם פריט": "אין פריטים", "תיאור": "", "כמות": "", "יחידה": "", "מיקום במחסן": "", "מינימום מלאי": "", "עודכן בתאריך": "" }];
 
       const ws = XLSX.utils.json_to_sheet(dataRows, { header: Object.keys(dataRows[0]) });
       const wb = XLSX.utils.book_new();
@@ -270,21 +270,21 @@ export default function Warehouses() {
 
       const wb = XLSX.utils.book_new();
 
-      // טוען פריטים לכל מחסן ברצף (אפשר לשדרג ל-Promise.all בהמשך)
+      // טוען פריטים לכל מחסן ברצף (אפשר לשפר ל-Promise.all אם ה־API והדפדפן עומדים בזה)
       for (let idx = 0; idx < list.length; idx++) {
         const w = list[idx];
         const wid = String(w._id || w.id);
-
         let items = [];
         try {
           items = await fetchItemsForWarehouse(wid);
-        } catch {
+        } catch (e) {
+          // אם יש שגיאה במחסן מסוים — נייצא גיליון ריק עם שורת „אין פריטים”
           items = [];
         }
 
         const dataRows = items.length
           ? items.map(itemToRow)
-          : [{ "SKU": "", "שם פריט": "אין פריטים", "תיאור": "", "כמות": "", "יחידה": "", "מיקום במחסן": "", "מינימום מלאי": "", "עודכן בתאריך": "", "מזהה פריט": "" }];
+          : [{ "SKU": "", "שם פריט": "אין פריטים", "תיאור": "", "כמות": "", "יחידה": "", "מיקום במחסן": "", "מינימום מלאי": "", "עודכן בתאריך": "" }];
 
         const ws = XLSX.utils.json_to_sheet(dataRows, { header: Object.keys(dataRows[0]) });
         const sheetName = sanitizeSheetName((w.name || `מחסן_${idx + 1}`).trim() || `מחסן_${idx + 1}`);
@@ -424,7 +424,7 @@ export default function Warehouses() {
                       </td>
                       <td style={styles.actionsCell} className="actions" data-label="פעולות">
                         {isEditing ? (
-                          <div style={{ display: "flex", gap: 8, justifyContent: "flex-start", flexWrap: "wrap" }}>
+                          <div style={{ display: "flex", gap: 8, justifyContent: "flex-start" }}>
                             <button type="button" style={styles.buttonSuccess} onClick={saveEdit}>שמור</button>
                             <button type="button" style={styles.buttonGhost} onClick={cancelEdit}>ביטול</button>
                           </div>
