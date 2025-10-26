@@ -1,27 +1,21 @@
 // frontend/src/components/ReturnsList.js
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Box, Button, Typography, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Paper, Stack, Divider, FormControl, InputLabel, Select, MenuItem
-} from "@mui/material";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import _ from "lodash";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
-import IconButton from "@mui/material/IconButton";
+import CloseIcon from "@mui/icons-material/Close";
 import { api } from "../api";
+import "./deliveries-list.css"; // משתמש באותו CSS של DeliveriesList
 
-/* ---------- עזרי תאריך זהים ל-Deliveries ---------- */
+// ---- עזרי תאריך (כמו ב-DeliveriesList) ----
 const toDate = (date) => {
   try {
     if (!date) return null;
-    // Firestore Timestamp
     if (typeof date === "object") {
       const sec = date.seconds ?? date._seconds;
       const nsec = date.nanoseconds ?? date._nanoseconds ?? 0;
-      if (typeof sec === "number") {
-        return new Date(sec * 1000 + Math.floor(nsec / 1e6));
-      }
+      if (typeof sec === "number") return new Date(sec * 1000 + Math.floor(nsec / 1e6));
     }
     const d = new Date(date);
     return Number.isNaN(d.getTime()) ? null : d;
@@ -42,103 +36,120 @@ const formatDate = (date) => {
   });
 };
 
-/* ---------- טבלת-מיני להצגת פריטי זיכוי ---------- */
-function ItemsMiniTable({ items, getName, getSku }) {
-  if (!Array.isArray(items) || items.length === 0) {
-    return <Typography variant="body2" color="text.secondary">—</Typography>;
+/* ---------------------------
+ * טבלת פריטים קטנה (RTL)
+ * מציגה גם פריטי קטלוג וגם פריטים ידניים
+ * --------------------------- */
+function ItemsMiniTable({ catalogItems, manualItems, getName, getSku }) {
+  const rows = [];
+
+  if (Array.isArray(catalogItems)) {
+    for (const it of catalogItems) {
+      rows.push({
+        sku: getSku(it.product) || "—",
+        name: getName(it.product),
+        quantity: Number(it.quantity || 0),
+      });
+    }
   }
+  if (Array.isArray(manualItems)) {
+    for (const mi of manualItems) {
+      rows.push({
+        sku: mi.sku || "",
+        name: mi.name || "פריט ידני",
+        quantity: Number(mi.quantity || 0),
+      });
+    }
+  }
+
+  if (rows.length === 0) return <div className="dl-empty">—</div>;
+
   return (
-    <Table size="small" sx={{ direction: "rtl" }}>
-      <TableHead>
-        <TableRow>
-          <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>מקט</TableCell>
-          <TableCell align="right">שם מוצר</TableCell>
-          <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>כמות</TableCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {items.map((it, i) => (
-          <TableRow key={i}>
-            <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>{getSku(it.product) || "—"}</TableCell>
-            <TableCell align="right">{getName(it.product)}</TableCell>
-            <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>{it.quantity}</TableCell>
-          </TableRow>
+    <table className="dl-items-table" dir="rtl">
+      <thead>
+        <tr>
+          <th>מקט</th>
+          <th>שם מוצר</th>
+          <th>כמות</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, i) => (
+          <tr key={i}>
+            <td>{r.sku || "—"}</td>
+            <td>{r.name}</td>
+            <td>{r.quantity}</td>
+          </tr>
         ))}
-      </TableBody>
-    </Table>
+      </tbody>
+    </table>
   );
 }
 
-/* ---------- הקומפוננטה הראשית ---------- */
 export default function ReturnsList() {
-  const [rows, setRows] = useState([]);       // כל הזיכויים
-  const [products, setProducts] = useState([]); // לרזולוציית שם/מקט
+  const [returns, setReturns] = useState([]);
+  const [products, setProducts] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
   useEffect(() => {
-    let mounted = true;
     (async () => {
       try {
         setLoading(true);
-        const [retRes, prodRes] = await Promise.all([
+        const [retRes, prodsRes] = await Promise.all([
           api.get("/api/returns"),
           api.get("/api/products"),
         ]);
-        if (!mounted) return;
-        setRows(Array.isArray(retRes.data) ? retRes.data : []);
-        setProducts(Array.isArray(prodRes.data) ? prodRes.data : []);
+        setReturns(Array.isArray(retRes.data) ? retRes.data : []);
+        setProducts(Array.isArray(prodsRes.data) ? prodsRes.data : []);
       } catch (e) {
-        if (!mounted) return;
-        console.error("Load returns/products failed:", e?.response?.data || e?.message);
-        setRows([]);
-        setProducts([]);
         setErr(e?.response?.data?.error || "שגיאה בטעינת נתונים");
+        setReturns([]);
+        setProducts([]);
       } finally {
-        if (mounted) setLoading(false);
+        setLoading(false);
       }
     })();
-    return () => { mounted = false; };
   }, []);
 
-  // מיפוי מוצרים ל־O(1)
+  // מפה מהירה של מוצרים (id -> {name, sku})
   const productMap = useMemo(() => {
     const m = new Map();
-    for (const p of products) {
-      m.set(String(p._id || p.id), { name: p.name, sku: p.sku || "" });
-    }
+    (products || []).forEach((p) => {
+      const id = String(p._id || p.id);
+      m.set(id, { name: p.name || "", sku: p.sku || "" });
+    });
     return m;
   }, [products]);
 
   const getProductName = (id) => productMap.get(String(id))?.name || String(id);
-  const getProductSku  = (id) => productMap.get(String(id))?.sku || "";
+  const getProductSku  = (id) => productMap.get(String(id))?.sku  || "";
 
-  // אופציות לקוח
+  // לקוחות לבחירה
   const customerOptions = useMemo(
-    () => _.uniq(rows.map((r) => r.customerName).filter(Boolean)).sort(),
-    [rows]
+    () => _.uniq((returns || []).map((r) => r.customerName).filter(Boolean)).sort(),
+    [returns]
   );
 
-  // סינון לפי לקוח (אם נבחר)
-  const filteredRows = useMemo(
-    () => (selectedCustomer ? rows.filter((r) => r.customerName === selectedCustomer) : rows),
-    [rows, selectedCustomer]
+  // סינון לפי לקוח
+  const filteredReturns = useMemo(
+    () => (selectedCustomer ? returns.filter((r) => r.customerName === selectedCustomer) : returns),
+    [returns, selectedCustomer]
   );
 
-  // קיבוץ לפי לקוח + מיון תאריך יורד
-  const groupedAndSorted = useMemo(() => {
-    return _(filteredRows)
+  // קיבוץ לפי לקוח + מיון תאריכים
+  const grouped = useMemo(() => {
+    return _(filteredReturns)
       .groupBy((r) => r.customerName || "ללא שם לקוח")
       .map((items, customerName) => ({
         customerName,
         returns: _.orderBy(items, (r) => toDate(r?.date)?.getTime() ?? 0, ["desc"]),
       }))
-      .orderBy("customerName", ["asc"])
       .value();
-  }, [filteredRows]);
+  }, [filteredReturns]);
 
-  // הורדת אישור זיכוי PDF
+  // הורדת PDF
   const handleDownloadReceipt = async (returnId) => {
     try {
       const res = await api.post(`/api/returns/${returnId}/receipt`, {}, { responseType: "blob" });
@@ -155,27 +166,39 @@ export default function ReturnsList() {
     }
   };
 
-  // ייצוא לאקסל
+  // ייצוא אקסל (כולל פריטים ידניים)
   const exportToExcel = () => {
-    const rowsForXlsx = [];
-    groupedAndSorted.forEach((group) => {
+    const rows = [];
+    grouped.forEach((group) => {
       group.returns.forEach((r) => {
-        const itemSKUs  = Array.isArray(r.items) ? r.items.map(it => getProductSku(it.product) || "—").join(", ") : "";
-        const itemNames = Array.isArray(r.items) ? r.items.map(it => getProductName(it.product)).join(", ") : "";
-        const itemQtys  = Array.isArray(r.items) ? r.items.map(it => it.quantity).join(", ") : "";
-        rowsForXlsx.push({
+        const allSKUs = [
+          ...(r.items || []).map((it) => getProductSku(it.product) || "—"),
+          ...(r.manualItems || []).map((mi) => mi.sku || ""),
+        ].filter((x) => x !== undefined);
+
+        const allNames = [
+          ...(r.items || []).map((it) => getProductName(it.product)),
+          ...(r.manualItems || []).map((mi) => mi.name || "פריט ידני"),
+        ];
+
+        const allQtys = [
+          ...(r.items || []).map((it) => Number(it.quantity || 0)),
+          ...(r.manualItems || []).map((mi) => Number(mi.quantity || 0)),
+        ];
+
+        rows.push({
           "לקוח": group.customerName,
           "תאריך": formatDate(r.date),
           "הוחזר ע״י": r.returnedBy || "",
           "מחסן יעד": r.warehouseName || r.warehouseId || "",
-          "מקטים": itemSKUs,
-          "מוצרים": itemNames,
-          "כמויות": itemQtys,
+          "מקטים": allSKUs.join(", "),
+          "מוצרים": allNames.join(", "),
+          "כמויות": allQtys.join(", "),
           "חתימה": r.signature ? "כן" : "לא",
         });
       });
     });
-    const ws = XLSX.utils.json_to_sheet(rowsForXlsx);
+    const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "זיכויים");
     const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
@@ -183,100 +206,78 @@ export default function ReturnsList() {
   };
 
   if (loading) {
-    return <div style={{ textAlign: "center", marginTop: 40 }}>טוען זיכויים...</div>;
+    return <div className="dl-status">טוען…</div>;
   }
   if (err) {
-    return <div style={{ color: "red", textAlign: "center", marginTop: 40 }}>{err}</div>;
+    return <div className="dl-status dl-error">{err}</div>;
   }
-  if (rows.length === 0) {
-    return <div style={{ textAlign: "center", marginTop: 40 }}>אין זיכויים להצגה</div>;
+  if (!returns || returns.length === 0) {
+    return <div className="dl-status dl-muted">אין זיכויים להצגה</div>;
   }
 
   return (
-    <Box sx={{ direction: "rtl", p: 3, maxWidth: 1000, margin: "auto", textAlign: "right" }}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
-        <Typography variant="h4" fontWeight="bold">רשימת זיכויים לפי לקוח</Typography>
-        <Button variant="contained" color="primary" onClick={exportToExcel}>
-          ייצוא לאקסל
-        </Button>
-      </Stack>
+    <div className="dl-root" dir="rtl">
+      {/* כותרת + ייצוא */}
+      <div className="dl-header">
+        <h2>רשימת זיכויים לפי לקוח</h2>
+        <button className="dl-btn primary" onClick={exportToExcel}>ייצוא לאקסל</button>
+      </div>
 
-      <FormControl sx={{ minWidth: 220, mb: 2, float: "left" }}>
-        <InputLabel id="customer-filter-label">סנן לפי לקוח</InputLabel>
-        <Select
-          labelId="customer-filter-label"
+      {/* סינון לקוח */}
+      <div className="dl-filter">
+        <label>סנן לפי לקוח:</label>
+        <select
+          className="dl-select"
           value={selectedCustomer}
-          label="סנן לפי לקוח"
           onChange={(e) => setSelectedCustomer(e.target.value)}
-          sx={{ direction: "rtl", textAlign: "right" }}
         >
-          <MenuItem value="">הצג הכל</MenuItem>
+          <option value="">הצג הכל</option>
           {customerOptions.map((cn) => (
-            <MenuItem value={cn} key={cn}>
-              {cn}
-            </MenuItem>
+            <option key={cn} value={cn}>{cn}</option>
           ))}
-        </Select>
-      </FormControl>
+        </select>
+      </div>
 
-      <Divider sx={{ mb: 2, clear: "both" }} />
+      {/* קבוצות לפי לקוח */}
+      {grouped.map((group) => (
+        <div key={group.customerName} className="dl-group">
+          <div className="dl-group-header">
+            <h3>{group.customerName}</h3>
+          </div>
 
-      {groupedAndSorted.map((group) => (
-        <Box key={group.customerName} mb={4}>
-          <Typography variant="h6" color="primary" mb={1}>
-            {group.customerName}
-          </Typography>
+          {group.returns.map((ret, idx) => (
+            <div key={ret._id || ret.id || idx} className="dl-card">
+              <div className="dl-card-row"><span>תאריך:</span> {formatDate(ret.date)}</div>
+              <div className="dl-card-row"><span>הוחזר ע״י:</span> {ret.returnedBy || "—"}</div>
+              <div className="dl-card-row"><span>מחסן יעד:</span> {ret.warehouseName || ret.warehouseId || "—"}</div>
 
-          <TableContainer component={Paper} elevation={2}>
-            <Table sx={{ direction: "rtl" }}>
-              <TableHead>
-                <TableRow>
-                  <TableCell align="right">תאריך</TableCell>
-                  <TableCell align="right">הוחזר ע״י</TableCell>
-                  <TableCell align="right">מחסן יעד</TableCell>
-                  <TableCell align="right">פריטים (מקט | שם מוצר | כמות)</TableCell>
-                  <TableCell align="right">חתימה</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {group.returns.map((ret, idx) => {
-                  const key = ret._id || ret.id || `${group.customerName}-${idx}`;
-                  return (
-                    <TableRow key={key} hover>
-                      <TableCell align="right">{formatDate(ret.date)}</TableCell>
-                      <TableCell align="right">{ret.returnedBy || "—"}</TableCell>
-                      <TableCell align="right">{ret.warehouseName || ret.warehouseId || "—"}</TableCell>
-                      <TableCell align="right" sx={{ p: 1 }}>
-                        <ItemsMiniTable
-                          items={ret.items}
-                          getName={getProductName}
-                          getSku={getProductSku}
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        {ret.signature ? (
-                          <IconButton onClick={() => handleDownloadReceipt(ret._id || ret.id)}>
-                            <PictureAsPdfIcon color="error" />
-                          </IconButton>
-                        ) : (
-                          <span>—</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Box>
+              <div className="dl-card-row">
+                <span>פריטים:</span>
+                <ItemsMiniTable
+                  catalogItems={ret.items}
+                  manualItems={ret.manualItems}
+                  getName={getProductName}
+                  getSku={getProductSku}
+                />
+              </div>
+
+              <div className="dl-card-actions">
+                {ret.signature ? (
+                  <button
+                    className="dl-icon-btn"
+                    onClick={() => handleDownloadReceipt(ret._id || ret.id)}
+                    title="הורד אישור זיכוי PDF"
+                  >
+                    <PictureAsPdfIcon style={{ color: "red" }} />
+                  </button>
+                ) : (
+                  <span>—</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       ))}
-
-      {groupedAndSorted.length === 0 && (
-        <Typography color="text.secondary" textAlign="center" mt={8}>
-          לא נמצאו זיכויים
-        </Typography>
-      )}
-    </Box>
+    </div>
   );
 }
-
