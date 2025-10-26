@@ -129,10 +129,6 @@ const styles = {
     alignItems: "center",
     gap: 8,
   },
-  switchInput: {
-    width: 48,
-    height: 28,
-  },
   twoCols: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
@@ -142,11 +138,6 @@ const styles = {
     display: "grid",
     gridTemplateColumns: "1fr 1fr 1fr",
     gap: 12,
-  },
-  divider: {
-    height: 1,
-    background: "#e5e7eb",
-    margin: "4px 0 0",
   },
 };
 
@@ -198,7 +189,7 @@ export default function IssueStock({ onIssued }) {
           setProducts([]);
           return;
         }
-        // שים לב: בקובץ קודם השתמשת ב warehouseId. אם השרת שלך מצפה ל warehouse — עדכן כאן.
+        // אם צד השרת שלך מצפה ל-warehouse (ולא warehouseId) עדכן כאן בהתאם.
         const res = await api.get("/api/products", { params: { warehouseId } });
         if (!mounted) return;
         setProducts(Array.isArray(res.data) ? res.data : []);
@@ -304,18 +295,26 @@ export default function IssueStock({ onIssued }) {
     try {
       setLoading(true);
 
-      const cleanItems = items.map((i) => {
+      // מפריד בין פריטי קטלוג לפריטים ידניים
+      const catalogItems = [];
+      const manualItems = [];
+
+      for (const i of items) {
         const qty = Number(i.quantity);
         if (i.type === "manual") {
-          return {
-            manual: true,
+          manualItems.push({
             name: String(i.name || "").trim(),
             sku: String(i.sku || "").trim(),
             quantity: qty,
-          };
+          });
+        } else {
+          // שליחה עם productId (ולא 'product')
+          catalogItems.push({
+            productId: String(i.product),
+            quantity: qty,
+          });
         }
-        return { product: String(i.product), quantity: qty };
-      });
+      }
 
       const selectedCustomerObj = customers.find(
         (c) => String(c._id || c.id) === String(customer)
@@ -324,8 +323,9 @@ export default function IssueStock({ onIssued }) {
 
       const body = {
         warehouseId: allowNoWarehouse ? "" : warehouseId,
-        noWarehouse: !!allowNoWarehouse,
-        items: cleanItems,
+        noWarehouse: !!allowNoWarehouse, // אופציונלי לשרת
+        items: catalogItems,              // רק פריטי קטלוג עם productId
+        manualItems,                      // פריטים ידניים ללא productId
         signature,
         deliveredTo,
         customer: String(customer),
@@ -342,7 +342,11 @@ export default function IssueStock({ onIssued }) {
       setDeliveredTo("");
       setPersonalNumber("");
       setItems([
-        { type: allowNoWarehouse ? "manual" : "catalog", ...(allowNoWarehouse ? { name: "", sku: "" } : { product: "" }), quantity: 1 },
+        {
+          type: allowNoWarehouse ? "manual" : "catalog",
+          ...(allowNoWarehouse ? { name: "", sku: "" } : { product: "" }),
+          quantity: 1,
+        },
       ]);
       setSignature(null);
       if (onIssued) onIssued();
@@ -361,14 +365,13 @@ export default function IssueStock({ onIssued }) {
 
         <form onSubmit={handleIssue} style={styles.form} dir="rtl">
           {/* מצב ידני */}
-          <div style={{ ...styles.row, ...styles.sectionBox }}>
+          <div style={{ ...styles.row, ...{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, background: "#fafafa" } }}>
             <div style={styles.switchRow}>
               <input
                 id="manual-switch"
                 type="checkbox"
                 checked={allowNoWarehouse}
                 onChange={handleToggleNoWarehouse}
-                style={styles.switchInput}
               />
               <label htmlFor="manual-switch" style={{ fontWeight: 700 }}>
                 ניפוק ללא מחסן (ידני)
