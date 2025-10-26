@@ -1,5 +1,5 @@
 // frontend/src/components/IssueStock.js
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { api } from "../api";
 import SimpleSignaturePad from "./SignaturePad";
 
@@ -140,7 +140,127 @@ const styles = {
     gridTemplateColumns: "1fr 1fr 1fr",
     gap: 12,
   },
+
+  // combobox
+  comboWrap: { position: "relative" },
+  comboInput: {
+    width: "100%",
+    boxSizing: "border-box",
+    padding: "12px 14px",
+    border: "1px solid #cbd5e1",
+    borderRadius: 10,
+    outline: "none",
+    fontSize: 15,
+    textAlign: "right",
+    direction: "rtl",
+  },
+  comboList: {
+    position: "absolute",
+    insetInlineStart: 0,
+    insetInlineEnd: 0,
+    top: "calc(100% + 6px)",
+    background: "#fff",
+    border: "1px solid #e5e7eb",
+    borderRadius: 10,
+    boxShadow: "0 8px 20px rgba(0,0,0,0.08)",
+    zIndex: 50,
+    maxHeight: 280,
+    overflowY: "auto",
+  },
+  comboItem: {
+    padding: "10px 12px",
+    borderBottom: "1px solid #f1f5f9",
+    cursor: "pointer",
+  },
+  comboItemMuted: { color: "#6b7280", fontSize: 12 },
 };
+
+function productLabel(p) {
+  const sku = p.sku ? `[${p.sku}] ` : "";
+  const name = p.name || "";
+  const stock = Number.isFinite(Number(p.stock)) ? ` (במלאי: ${p.stock})` : "";
+  return `${sku}${name}${stock}`;
+}
+
+function filterProducts(products, q) {
+  const qx = (q || "").trim();
+  if (!qx) return products.slice(0, 30);
+  const terms = qx.split(/\s+/).map((t) => t.toLowerCase());
+  const score = (p) => {
+    const hay = `${p.sku || ""} ${p.name || ""}`.toLowerCase();
+    let s = 0;
+    for (const t of terms) {
+      if (hay.includes(t)) s += 1;
+    }
+    return s;
+  };
+  return products
+    .map((p) => ({ p, s: score(p) }))
+    .filter((x) => x.s > 0)
+    .sort((a, b) => b.s - a.s || String(a.p.name || "").localeCompare(String(b.p.name || ""), "he"))
+    .slice(0, 30)
+    .map((x) => x.p);
+}
+
+/** קומבו־בוקס לבחירת מוצר עם חיפוש */
+function SearchableProductSelect({ value, searchTerm, onChange, onSearch, products, disabled }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    const onDocClick = (e) => {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, []);
+
+  const options = useMemo(() => filterProducts(products, searchTerm), [products, searchTerm]);
+
+  // כיתוב בשדה: אם נבחר מוצר ואין חיפוש – מציגים התווית שלו
+  const selected = value ? products.find((p) => String(p._id || p.id) === String(value)) : null;
+  const inputValue = searchTerm ?? (selected ? productLabel(selected) : "");
+
+  return (
+    <div style={styles.comboWrap} ref={wrapRef} dir="rtl">
+      <input
+        style={styles.comboInput}
+        placeholder="הקלד שם/מקט…"
+        value={inputValue}
+        onChange={(e) => onSearch(e.target.value)}
+        onFocus={() => !disabled && setOpen(true)}
+        disabled={disabled}
+      />
+      {open && !disabled && (
+        <div style={styles.comboList}>
+          {options.length === 0 ? (
+            <div style={{ ...styles.comboItem, ...styles.comboItemMuted }}>לא נמצאו תוצאות</div>
+          ) : (
+            options.map((p) => {
+              const id = String(p._id || p.id);
+              return (
+                <div
+                  key={id}
+                  style={styles.comboItem}
+                  onClick={() => {
+                    onChange(id, productLabel(p));
+                    setOpen(false);
+                  }}
+                >
+                  <div style={{ fontWeight: 700 }}>{p.name}</div>
+                  <div style={{ ...styles.comboItemMuted }}>
+                    {p.sku ? `מקט: ${p.sku} · ` : ""}מלאי: {p.stock ?? 0}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function IssueStock({ onIssued }) {
   const [warehouses, setWarehouses] = useState([]);
@@ -152,8 +272,8 @@ export default function IssueStock({ onIssued }) {
   const [deliveredTo, setDeliveredTo] = useState("");
   const [personalNumber, setPersonalNumber] = useState("");
 
-  // item: { type: 'catalog'|'manual', product?, name?, sku?, quantity }
-  const [items, setItems] = useState([{ type: "catalog", product: "", quantity: 1 }]);
+  // item: { type: 'catalog'|'manual', product?, searchTerm?, name?, sku?, quantity }
+  const [items, setItems] = useState([{ type: "catalog", product: "", searchTerm: "", quantity: 1 }]);
 
   const [signature, setSignature] = useState(null);
   const [error, setError] = useState("");
@@ -196,7 +316,7 @@ export default function IssueStock({ onIssued }) {
         // איפוס שורות קטלוג אם המחסן השתנה
         setItems((prev) =>
           prev.map((row) =>
-            row.type === "catalog" ? { ...row, product: "", quantity: 1 } : row
+            row.type === "catalog" ? { ...row, product: "", searchTerm: "", quantity: 1 } : row
           )
         );
       } catch {
@@ -222,7 +342,7 @@ export default function IssueStock({ onIssued }) {
     });
   };
   const addCatalogItem = () =>
-    setItems((rows) => [...rows, { type: "catalog", product: "", quantity: 1 }]);
+    setItems((rows) => [...rows, { type: "catalog", product: "", searchTerm: "", quantity: 1 }]);
   const addManualItem = () =>
     setItems((rows) => [...rows, { type: "manual", name: "", sku: "", quantity: 1 }]);
   const removeItem = (idx) =>
@@ -241,7 +361,7 @@ export default function IssueStock({ onIssued }) {
       setProducts([]);
       setItems([{ type: "manual", name: "", sku: "", quantity: 1 }]);
     } else {
-      setItems([{ type: "catalog", product: "", quantity: 1 }]);
+      setItems([{ type: "catalog", product: "", searchTerm: "", quantity: 1 }]);
     }
   };
 
@@ -265,7 +385,6 @@ export default function IssueStock({ onIssued }) {
 
     // אימות לפי סוג פריט
     if (allowNoWarehouse) {
-      // רק ידני
       if (items.some((i) => i.type !== "manual"))
         return setError("במצב 'ניפוק ללא מחסן' מותרות רק שורות ידניות.");
       for (const row of items) {
@@ -273,7 +392,6 @@ export default function IssueStock({ onIssued }) {
           return setError("בפריט ידני יש למלא 'שם פריט'.");
       }
     } else {
-      // מצב רגיל — בדיקות מלאי לקטלוג
       const productMap = new Map(products.map((p) => [String(p._id || p.id), p]));
       for (const row of items) {
         if (row.type === "catalog") {
@@ -295,7 +413,6 @@ export default function IssueStock({ onIssued }) {
     try {
       setLoading(true);
 
-      // מפריד בין פריטי קטלוג לפריטים ידניים
       const catalogItems = [];
       const manualItems = [];
 
@@ -308,7 +425,6 @@ export default function IssueStock({ onIssued }) {
             quantity: qty,
           });
         } else {
-          // שליחה עם productId (ולא 'product')
           catalogItems.push({
             productId: String(i.product),
             quantity: qty,
@@ -321,43 +437,28 @@ export default function IssueStock({ onIssued }) {
       );
       const customerName = selectedCustomerObj ? selectedCustomerObj.name : "";
 
-      // בונים payload שמכסה גם צורות שמות נפוצות שהשרתים דורשים
       const base = {
-        // שדות חובה לוגיים
         items: catalogItems,
         manualItems,
-
-        // מזהי ישות
         customerId: String(customer),
-        customer: String(customer), // להשאיר תאימות אם השרת מצפה ל"customer"
-
-        // נתוני ניפוק
+        customer: String(customer),
         deliveredTo: deliveredTo.trim(),
-        delivered_to: deliveredTo.trim(), // תאימות לנחשי-snake_case
+        delivered_to: deliveredTo.trim(),
         personalNumber: personalNumber.trim(),
-        personal_number: personalNumber.trim(), // תאימות
+        personal_number: personalNumber.trim(),
         signature,
-        signatureData: signature, // תאימות
-
-        // שדות מידע משלימים
+        signatureData: signature,
         customerName,
       };
 
-      // warehouseId יישלח רק אם יש (כדי לא להפיל ולידציה על ערך ריק)
       if (!allowNoWarehouse && warehouseId) {
         base.warehouseId = warehouseId;
       } else {
         base.noWarehouse = true;
       }
 
-      const body = base;
-
-      // דיבוג: לראות מה יוצא
-      // (רק בזמן פיתוח; אפשר להסיר בפרודקשן)
-      // eslint-disable-next-line no-console
-      console.log("DELIVERY PAYLOAD", body);
-
-      await api.post("/api/deliveries", body);
+      console.log("DELIVERY PAYLOAD", base);
+      await api.post("/api/deliveries", base);
 
       setSuccess("ניפוק בוצע בהצלחה");
       // reset
@@ -368,14 +469,13 @@ export default function IssueStock({ onIssued }) {
       setItems([
         {
           type: allowNoWarehouse ? "manual" : "catalog",
-          ...(allowNoWarehouse ? { name: "", sku: "" } : { product: "" }),
+          ...(allowNoWarehouse ? { name: "", sku: "" } : { product: "", searchTerm: "" }),
           quantity: 1,
         },
       ]);
       setSignature(null);
       if (onIssued) onIssued();
     } catch (err) {
-      // הצגת פירוט שגיאה אם קיים
       const srv = err?.response?.data;
       const details =
         typeof srv === "object" ? JSON.stringify(srv, null, 2) :
@@ -496,21 +596,18 @@ export default function IssueStock({ onIssued }) {
                 {item.type === "catalog" ? (
                   <div style={styles.twoCols}>
                     <div style={styles.row}>
-                      <label style={styles.label}>בחר מוצר *</label>
-                      <select
-                        style={styles.select}
+                      <label style={styles.label}>בחר/חפש מוצר *</label>
+                      <SearchableProductSelect
                         value={item.product ? String(item.product) : ""}
-                        onChange={(e) => handleItemField(idx, "product", e.target.value)}
+                        searchTerm={item.searchTerm ?? ""}
+                        onSearch={(q) => handleItemField(idx, "searchTerm", q)}
+                        onChange={(id, label) => {
+                          handleItemField(idx, "product", id);
+                          handleItemField(idx, "searchTerm", label);
+                        }}
+                        products={sortedProducts}
                         disabled={allowNoWarehouse || !warehouseId}
-                        required
-                      >
-                        <option value="">— בחר —</option>
-                        {sortedProducts.map((p) => (
-                          <option key={p._id || p.id} value={String(p._id || p.id)}>
-                            {p.sku ? `[${p.sku}] ` : ""}{p.name} (במלאי: {p.stock})
-                          </option>
-                        ))}
-                      </select>
+                      />
                     </div>
 
                     <div style={styles.row}>
