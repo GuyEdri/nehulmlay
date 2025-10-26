@@ -523,7 +523,7 @@ export default function IssueStock({ onIssued }) {
                 onChange={(e) => setWarehouseId(e.target.value)}
                 required
               >
-                <option value="">— בחר —</option>
+                <option value="">בחר</option>
                 {warehouses.map((w) => (
                   <option key={w._id || w.id} value={String(w._id || w.id)}>
                     {w.name || "(ללא שם)"}{w.address ? ` — ${w.address}` : ""}
@@ -543,7 +543,7 @@ export default function IssueStock({ onIssued }) {
               onChange={(e) => setCustomer(e.target.value)}
               required
             >
-              <option value="">— בחר —</option>
+              <option value="">בחר</option>
               {customers.map((c) => (
                 <option key={c._id || c.id} value={String(c._id || c.id)}>
                   {c.name}

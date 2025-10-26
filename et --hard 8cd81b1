@@ -1,0 +1,158 @@
+[33m5bb6a21[m[33m ([m[1;36mHEAD -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m Revert "footer"
+[33md91b9d6[m server.js
+[33m3290afc[m addPRoductlist
+[33ma61304d[m PRoductlist
+[33me41bb4e[m Ammoreturnlist
+[33mb1ce7b0[m Ammodeliverlist
+[33m9da665b[m Ammaddreturn
+[33me43b741[m AmmoIssuestock
+[33mf300319[m AmmoReturnlist
+[33m3e57fd4[m AmmoDeliverieslist
+[33m9430332[m AmmoIssuestock
+[33m7829aec[m tikun
+[33m39c0cc0[m Ammoretunrlist
+[33m5b5dadc[m AmmoDeliverylist
+[33m600490f[m AmmoIssuestock.js
+[33m7072061[m ammoApp.jsV1
+[33m1ada71f[m ammoApp.js
+[33m0ad12ab[m ammoApp.js
+[33m8cd81b1[m footer
+[33m84ea8f2[m footer
+[33m7324d5f[m footer
+[33m4042eda[m footer
+[33m2140276[m add search
+[33m5e3921b[m add search
+[33mf9e5f24[m add search
+[33md2b3240[m navbar
+[33mf088a4a[m returnlist RTL
+[33m70458f1[m ניפוק ידני ללא בחירה מהמלאי הקיים
+[33mbe98c52[m ניפוק ידני ללא בחירה מהמלאי הקיים
+[33macb7b17[m ניפוק ידני ללא בחירה מהמלאי הקיים
+[33m84a55b2[m ניפוק ידני ללא בחירה מהמלאי הקיים
+[33mc9b21ec[m ניפוק ידני ללא בחירה מהמלאי הקיים
+[33m8593783[m ניפוק ידני ללא בחירה מהמלאי הקיים
+[33m7cbc4c6[m ייצוא לאקסל לפי מחסן
+[33m1c34cc3[m ייצוא לאקסל לפי מחסן
+[33mfe04fea[m ייצוא לאקסל לפי מחסן
+[33mc76015c[m ייצוא לאקסל לפי מחסן
+[33m58fcad9[m AddReturn
+[33mb623d5f[m Deliverieslist zikui
+[33m3fd041b[m Deliverieslist RTL
+[33m13dff4a[m Deliverieslist RTL
+[33m42150ca[m Deliverieslist RTL
+[33m7bf3156[m css
+[33m0c65aac[m css
+[33m297b35e[m css
+[33mef5dbe0[m warehouse display
+[33m031664c[m warehouse display
+[33m0c2170a[m cssProductlist
+[33m402b6d8[m Mobile update
+[33mae57a27[m Mobile update
+[33m62e49d1[m disabled mui
+[33m34eb71d[m disabled mui
+[33mf6cd9b7[m asd
+[33mcff92f7[m asd
+[33md788f5e[m asdsד
+[33m1f37085[m asdsד
+[33m39da996[m asds
+[33meaa9264[m asds
+[33me84f3d2[m asds
+[33m3037955[m asds
+[33md9c7844[m asd
+[33ma44050f[m asd
+[33ma6112d8[m asd
+[33m5f70def[m dsa
+[33m397657a[m text-lign cetner
+[33m10ca4cb[m asd
+[33m9d9bed5[m asd
+[33m2b90f65[m textAlign:right
+[33m1305f39[m asd
+[33me5cdd2f[m asd
+[33mb436a2b[m Warehouses
+[33m3a32d1a[m asdf
+[33m7c44498[m asd
+[33m96fcfb7[m warehouses
+[33m5b9139c[m warehouses
+[33mf553a8d[m dir rtl index.html
+[33m8967d88[m DeliveriesList rtl
+[33m504da39[m deliveries rtl
+[33mf48a94a[m DeliveriesList RTL
+[33m240b2cb[m AddReturn RTL
+[33m8ca9898[m textalign right signature
+[33m857af62[m textalign right signature
+[33m7231416[m text-align right
+[33m48c57a7[m text align right
+[33mcb811d6[m Productlist rtl
+[33m2089e14[m Frontend RTL
+[33m5238375[m asd
+[33mc49a643[m signature returns
+[33ma87b72a[m signature
+[33m15fbbb3[m  return list
+[33m4dd94fd[m test
+[33m660b930[m asdasd
+[33m6918c2b[m retuns
+[33m0ae4add[m asd
+[33mb6a89c9[m tohen
+[33m18bf3e3[m  returns front
+[33mc7f5d21[m returns
+[33m5734320[m returns
+[33mdb0fe40[m shem mahsan banipuk
+[33m5889773[m shem mahsan banipuk
+[33m00dd246[m filter by warehouse
+[33m171fb7f[m deliveries
+[33m9111dd6[m Nipuk
+[33m6113db0[m Revert to commit 702440c
+[33m179ddff[m Revert "asd"
+[33m8979be3[m Revert "Revert "asd""
+[33ma52a1df[m Revert "Revert "asd""
+[33m6c1ae9b[m Revert "asd"
+[33m6876a37[m Revert "asd"
+[33m2d5d5db[m asd
+[33m1a1ffeb[m asd
+[33mb43777c[m firestore
+[33m9847156[m s
+[33m702440c[m asd
+[33me60e309[m s
+[33md547663[m warehouses create
+[33m95ded5d[m asd
+[33m79dc940[m sheyuh le warehouse
+[33mcff93f3[m Warehouses
+[33mbb96a6a[m Firstoreservice
+[33m93bff0b[m Warehouses
+[33m3768c9a[m Warehouses
+[33m1cd7775[m warehouses
+[33m4cf3669[m warehouses
+[33m3bb6f94[m test
+[33mea0dfd5[m Revert "Revert "serach by containers""
+[33medc4029[m Revert "serach by containers"
+[33m2f1bd89[m serach by containers
+[33m380a825[m asd
+[33m61c5ce9[m asd
+[33mc390d6f[m asd
+[33m554e793[m pdf
+[33m2f40fcb[m pdf
+[33md778d4f[m pdf
+[33meb4a6f3[m pdf
+[33ma4d9ebe[m pdf
+[33me8fb4a2[m PDF RTL
+[33mc10e59d[m PDF RTL
+[33md095c0e[m PDF RTL
+[33mb01e2c9[m PDF RTL
+[33ma4e28fe[m PDF RTL
+[33m22666b7[m PDF RTL
+[33m7345bfd[m update
+[33mc7d40cb[m PDF RTL
+[33m80e5cba[m wello
+[33m3c30d74[m Login
+[33mcf371bf[m Login
+[33m4a1af68[m MAKAT
+[33mf3e36ef[m PDF fix
+[33mc852b61[m update
+[33mb81c9c6[m Logo path update
+[33mbdd6e18[m fix: logo path in CSS for Render build
+[33mec9775c[m Add frontend as regular folder
+[33m0171a72[m Deploy: backend CORS+limits, frontend api client, fixes
+[33md826d8f[m Stop tracking node_modules and add .gitignore
+[33m348542d[m Ignore service account file
+[33m2eea71b[m Deploy
+[33m807b9b0[m deploy
